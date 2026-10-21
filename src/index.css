@@ -1,0 +1,53 @@
+:root {
+  --color-purple: #7700ff;
+  --color-purple-hover: #6500d9;
+  --color-orange: #ff4f12;
+  --color-black: #101828;
+  --color-white: #ffffff;
+  --color-grey: #e3e8ec;
+  --color-lavender: #e8d2ed;
+  --color-text-grey: #777d86;
+
+  --font-main: "Rostelecom Basis", Arial, sans-serif;
+
+  --radius-input: 10px;
+  --radius-card: 20px;
+  --radius-circle: 50%;
+
+  --card-shadow: 0 12px 30px rgb(16 24 40 / 12%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  min-height: 100%;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  font-family: var(--font-main);
+  color: var(--color-black);
+  background-color: var(--color-white);
+}
+
+button,
+input {
+  font-family: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+a {
+  color: inherit;
+}
+
+#root {
+  min-height: 100vh;
+}
