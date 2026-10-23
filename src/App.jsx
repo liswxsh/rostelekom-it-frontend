@@ -1,18 +1,174 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import './App.css';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
+
+function formatPhone(value) {
+  let digits = value.replace(/\D/g, '');
+
+  if (!digits) return '';
+
+  if (digits.startsWith('8')) {
+    digits = `7${digits.slice(1)}`;
+  } else if (!digits.startsWith('7')) {
+    digits = `7${digits}`;
+  }
+
+  digits = digits.slice(0, 11);
+  const number = digits.slice(1);
+
+  if (!number) return '+7';
+
+  let formatted = `+7 (${number.slice(0, 3)}`;
+  if (number.length >= 3) formatted += ')';
+  if (number.length > 3) formatted += ` ${number.slice(3, 6)}`;
+  if (number.length > 6) formatted += `-${number.slice(6, 8)}`;
+  if (number.length > 8) formatted += `-${number.slice(8, 10)}`;
+
+  return formatted;
+}
+
+function normalizePhone(value) {
+  return `+${value.replace(/\D/g, '')}`;
+}
+
+function isValidPhone(value) {
+  return /^\+7\d{10}$/.test(normalizePhone(value));
+}
+
+class ApiError extends Error {
+  constructor(message, status, retryAfterSeconds = 0) {
+    super(message);
+    this.status = status;
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
+async function postJson(path, body) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const retryAfterSeconds = Number(
+      data.retryAfterSeconds || response.headers.get('Retry-After') || 0,
+    );
+    const fallbackMessage = response.status === 503
+      ? 'Сервис авторизации временно недоступен. Проверьте, запущен ли user-service.'
+      : 'Не удалось выполнить запрос. Попробуйте ещё раз.';
+
+    throw new ApiError(
+      data.detail || data.message || fallbackMessage,
+      response.status,
+      retryAfterSeconds,
+    );
+  }
+
+  return data;
+}
+
 function App() {
-  const [loginType, setLoginType] = useState('email');
-  const [showPassword, setShowPassword] = useState(false);
+  const [step, setStep] = useState('phone');
+  const [phone, setPhone] = useState('');
+  const [code, setCode] = useState('');
+  const [devCode, setDevCode] = useState('');
+  const [error, setError] = useState('');
+  const [hasValidationError, setHasValidationError] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [retryAfterSeconds, setRetryAfterSeconds] = useState(0);
+
+  useEffect(() => {
+    if (retryAfterSeconds <= 0) return undefined;
+
+    const timer = window.setTimeout(() => {
+      setRetryAfterSeconds((seconds) => Math.max(0, seconds - 1));
+    }, 1000);
+
+    return () => window.clearTimeout(timer);
+  }, [retryAfterSeconds]);
+
+  const requestCode = async (event) => {
+    event.preventDefault();
+    setError('');
+    setHasValidationError(false);
+
+    if (!isValidPhone(phone)) {
+      setError('Введите номер полностью в формате +7 (999) 000-00-00');
+      setHasValidationError(true);
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const challenge = await postJson('/api/auth/otp/request', {
+        phone: normalizePhone(phone),
+      });
+      setPhone(formatPhone(challenge.phone || phone));
+      setDevCode(challenge.code || '');
+      setCode('');
+      setStep('code');
+    } catch (requestError) {
+      if (requestError instanceof ApiError && requestError.retryAfterSeconds > 0) {
+        setRetryAfterSeconds(requestError.retryAfterSeconds);
+      } else {
+        setError(requestError.message);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const verifyCode = async (event) => {
+    event.preventDefault();
+    setError('');
+    setHasValidationError(false);
+
+    if (!/^\d{6}$/.test(code)) {
+      setError('Код подтверждения должен состоять из 6 цифр');
+      setHasValidationError(true);
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const tokens = await postJson('/api/auth/otp/verify', {
+        phone: normalizePhone(phone),
+        code,
+      });
+      localStorage.setItem('accessToken', tokens.accessToken);
+      localStorage.setItem('refreshToken', tokens.refreshToken);
+      setStep('success');
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const changePhone = () => {
+    setStep('phone');
+    setCode('');
+    setDevCode('');
+    setError('');
+    setHasValidationError(false);
+    setRetryAfterSeconds(0);
+  };
+
+  const requestButtonText = retryAfterSeconds > 0
+    ? `Повторить через ${retryAfterSeconds} сек.`
+    : isLoading
+      ? 'Отправляем…'
+      : 'Получить код';
 
   return (
     <main className="login-page">
       <section className="promo-section">
-        <img
-          className="logo"
-          src="/rostelecom-logo.png"
-          alt="Ростелеком"
-        />
+        <img className="logo" src="/rostelecom-logo.png" alt="Ростелеком" />
 
         <div className="promo-content">
           <h1>
@@ -20,28 +176,15 @@ function App() {
             <br />
             в одном месте
           </h1>
-
           <p className="promo-description">
             Проверяйте баланс, оплачивайте услуги
             <br />
             и обращайтесь в поддержку онлайн
           </p>
-
           <ul className="advantages">
-            <li>
-              <span className="check">✓</span>
-              <span>Интернет, ТВ и телефония</span>
-            </li>
-
-            <li>
-              <span className="check">✓</span>
-              <span>История платежей и начислений</span>
-            </li>
-
-            <li>
-              <span className="check">✓</span>
-              <span>Круглосуточная техническая поддержка</span>
-            </li>
+            <li><span className="check">✓</span><span>Интернет, ТВ и телефония</span></li>
+            <li><span className="check">✓</span><span>История платежей и начислений</span></li>
+            <li><span className="check">✓</span><span>Круглосуточная техническая поддержка</span></li>
           </ul>
         </div>
 
@@ -50,100 +193,105 @@ function App() {
       </section>
 
       <section className="form-section">
-        <form
-          className="login-card"
-          onSubmit={(event) => event.preventDefault()}
-        >
-          <h2>Вход в личный кабинет</h2>
+        {step === 'phone' && (
+          <form className="login-card" onSubmit={requestCode} noValidate>
+            <div className="form-heading">
+              <h2>Вход в личный кабинет</h2>
+              <p>Введите номер телефона, привязанный к лицевому счёту</p>
+            </div>
 
-          <div className="login-tabs" role="tablist">
+            <div className="login-fields">
+              <label className="field-label" htmlFor="phone">Номер телефона</label>
+              <input
+                id="phone"
+                className="form-input"
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                placeholder="+7 (999) 000-00-00"
+                pattern="\+7 \([0-9]{3}\) [0-9]{3}-[0-9]{2}-[0-9]{2}"
+                title="Введите номер полностью: +7 (999) 000-00-00"
+                maxLength={18}
+                value={phone}
+                onChange={(event) => {
+                  setPhone(formatPhone(event.target.value));
+                  setError('');
+                  setHasValidationError(false);
+                }}
+                disabled={isLoading}
+                aria-invalid={hasValidationError}
+                aria-describedby={error ? 'phone-error' : undefined}
+                required
+                autoFocus
+              />
+              {error && <p id="phone-error" className="form-error" role="alert">{error}</p>}
+            </div>
+
             <button
-              type="button"
-              role="tab"
-              aria-selected={loginType === 'phone'}
-              className={`tab ${
-                loginType === 'phone' ? 'tab-active' : ''
-              }`}
-              onClick={() => setLoginType('phone')}
+              className="login-button"
+              type="submit"
+              disabled={isLoading || retryAfterSeconds > 0}
             >
-              Телефон
+              {requestButtonText}
             </button>
+          </form>
+        )}
 
-            <button
-              type="button"
-              role="tab"
-              aria-selected={loginType === 'email'}
-              className={`tab ${
-                loginType === 'email' ? 'tab-active' : ''
-              }`}
-              onClick={() => setLoginType('email')}
-            >
-              Электронная почта
-            </button>
-          </div>
+        {step === 'code' && (
+          <form className="login-card" onSubmit={verifyCode} noValidate>
+            <div className="form-heading">
+              <h2>Введите код из СМС</h2>
+              <p>Код отправлен на <strong>{phone}</strong></p>
+              <button className="change-phone-button" type="button" onClick={changePhone}>
+                Изменить номер
+              </button>
+            </div>
 
-          <input
-            key={loginType}
-            className="form-input"
-            type={loginType === 'phone' ? 'tel' : 'email'}
-            placeholder={
-              loginType === 'phone'
-                ? '+7 999 000-00-00'
-                : 'example@mail.ru'
-            }
-          />
-
-          <label className="password-label" htmlFor="password">
-            Пароль
-          </label>
-
-          <div className="password-field">
-            <input
-              id="password"
-              type={showPassword ? 'text' : 'password'}
-              placeholder="********"
-            />
-
-            <button
-              className="eye-button"
-              type="button"
-              aria-label={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
-              onClick={() => setShowPassword(!showPassword)}
-            >
-              {showPassword ? (
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M2 12C3.7 7.8 7.3 5 12 5C16.7 5 20.3 7.8 22 12C20.3 16.2 16.7 19 12 19C7.3 19 3.7 16.2 2 12Z" />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
-              ) : (
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M3 3L21 21" />
-                  <path d="M10.6 10.7A2 2 0 0 0 13.3 13.4" />
-                  <path d="M9.9 4.2C10.6 4.1 11.3 4 12 4C17 4 20.3 8 21 12C20.8 13.2 20.3 14.4 19.6 15.4" />
-                  <path d="M6.2 6.2C4.5 7.5 3.4 9.5 3 12C3.7 16 7 20 12 20C13.5 20 14.8 19.6 15.9 19" />
-                </svg>
+            <div className="login-fields">
+              {devCode && (
+                <p className="dev-code" role="status">
+                  Код для тестового входа: <strong>{devCode}</strong>
+                </p>
               )}
+              <label className="field-label" htmlFor="sms-code">Код подтверждения</label>
+              <input
+                id="sms-code"
+                className="form-input sms-code-input"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]{6}"
+                minLength={6}
+                maxLength={6}
+                placeholder="000000"
+                value={code}
+                onChange={(event) => {
+                  setCode(event.target.value.replace(/\D/g, ''));
+                  setError('');
+                  setHasValidationError(false);
+                }}
+                disabled={isLoading}
+                aria-invalid={hasValidationError}
+                aria-describedby={error ? 'code-error' : undefined}
+                required
+                autoFocus
+              />
+              {error && <p id="code-error" className="form-error" role="alert">{error}</p>}
+            </div>
+
+            <button className="login-button" type="submit" disabled={isLoading}>
+              {isLoading ? 'Проверяем…' : 'Войти'}
             </button>
-          </div>
+          </form>
+        )}
 
-          <div className="form-options">
-            <label className="remember">
-              <input type="checkbox" />
-              <span>Запомнить меня</span>
-            </label>
-
-            <a href="#">Забыли пароль?</a>
-          </div>
-
-          <button className="login-button" type="submit">
-            Войти
-          </button>
-
-          <p className="register-text">
-            Ещё нет аккаунта?{' '}
-            <a href="#">Зарегистрироваться</a>
-          </p>
-        </form>
+        {step === 'success' && (
+          <section className="login-card success-card" aria-live="polite">
+            <div className="success-icon" aria-hidden="true">✓</div>
+            <h2>Вход выполнен</h2>
+            <p>Вы успешно вошли в личный кабинет.</p>
+          </section>
+        )}
       </section>
     </main>
   );
