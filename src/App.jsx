@@ -3,6 +3,7 @@ import './App.css';
 import { ApiError, postJson } from './api.js';
 
 function formatPhone(value) {
+  // Маска собирается по мере ввода цифр
   let digits = value.replace(/\D/g, '');
 
   if (!digits) return '';
@@ -28,6 +29,7 @@ function formatPhone(value) {
 }
 
 function normalizePhone(value) {
+  // На бэк номер уходит без скобок и дефисов
   return `+${value.replace(/\D/g, '')}`;
 }
 
@@ -64,6 +66,7 @@ function App() {
   useEffect(() => {
     if (retryAfterSeconds <= 0) return undefined;
 
+    // Уменьшаем Retry-After раз в секунду
     const timer = window.setTimeout(() => {
       setRetryAfterSeconds((seconds) => Math.max(0, seconds - 1));
     }, 1000);

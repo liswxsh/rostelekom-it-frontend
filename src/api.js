@@ -1,5 +1,6 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 
+// Если бэк не прислал detail, показываем свой текст
 const STATUS_MESSAGES = {
   400: 'Проверьте введённые данные.',
   401: 'Необходимо войти в систему.',
@@ -15,6 +16,7 @@ const STATUS_MESSAGES = {
 function extractErrorMessages(errors) {
   if (typeof errors === 'string') return [errors];
 
+  // errors может прийти массивом или объектом с полями
   if (Array.isArray(errors)) {
     return errors.flatMap(extractErrorMessages);
   }
@@ -40,6 +42,7 @@ export class ApiError extends Error {
 function createApiError(response, data) {
   const problem = data && typeof data === 'object' ? data : {};
   const validationMessages = [...new Set(extractErrorMessages(problem.errors))];
+  // Validation failed не показываем, если есть нормальный текст ошибки
   const readableDetail = problem.detail && problem.detail !== 'Validation failed'
     ? problem.detail
     : '';
