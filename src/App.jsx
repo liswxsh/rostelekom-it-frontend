@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import './App.css';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
+import { ApiError, postJson } from './api.js';
 
 function formatPhone(value) {
   let digits = value.replace(/\D/g, '');
@@ -36,38 +35,19 @@ function isValidPhone(value) {
   return /^\+7\d{10}$/.test(normalizePhone(value));
 }
 
-class ApiError extends Error {
-  constructor(message, status, retryAfterSeconds = 0) {
-    super(message);
-    this.status = status;
-    this.retryAfterSeconds = retryAfterSeconds;
-  }
-}
+function FormError({ id, message, details }) {
+  if (!message) return null;
 
-async function postJson(path, body) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    const retryAfterSeconds = Number(
-      data.retryAfterSeconds || response.headers.get('Retry-After') || 0,
-    );
-    const fallbackMessage = response.status === 503
-      ? 'Сервис авторизации временно недоступен. Проверьте, запущен ли user-service.'
-      : 'Не удалось выполнить запрос. Попробуйте ещё раз.';
-
-    throw new ApiError(
-      data.detail || data.message || fallbackMessage,
-      response.status,
-      retryAfterSeconds,
-    );
-  }
-
-  return data;
+  return (
+    <div id={id} className="form-error" role="alert">
+      <p>{message}</p>
+      {details.length > 0 && (
+        <ul>
+          {details.map((detail) => <li key={detail}>{detail}</li>)}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 function App() {
@@ -76,6 +56,7 @@ function App() {
   const [code, setCode] = useState('');
   const [devCode, setDevCode] = useState('');
   const [error, setError] = useState('');
+  const [errorDetails, setErrorDetails] = useState([]);
   const [hasValidationError, setHasValidationError] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [retryAfterSeconds, setRetryAfterSeconds] = useState(0);
@@ -93,6 +74,7 @@ function App() {
   const requestCode = async (event) => {
     event.preventDefault();
     setError('');
+    setErrorDetails([]);
     setHasValidationError(false);
 
     if (!isValidPhone(phone)) {
@@ -116,6 +98,8 @@ function App() {
         setRetryAfterSeconds(requestError.retryAfterSeconds);
       } else {
         setError(requestError.message);
+        setErrorDetails(requestError instanceof ApiError ? requestError.details : []);
+        setHasValidationError(requestError instanceof ApiError && requestError.status === 400);
       }
     } finally {
       setIsLoading(false);
@@ -125,6 +109,7 @@ function App() {
   const verifyCode = async (event) => {
     event.preventDefault();
     setError('');
+    setErrorDetails([]);
     setHasValidationError(false);
 
     if (!/^\d{6}$/.test(code)) {
@@ -145,6 +130,8 @@ function App() {
       setStep('success');
     } catch (requestError) {
       setError(requestError.message);
+      setErrorDetails(requestError instanceof ApiError ? requestError.details : []);
+      setHasValidationError(requestError instanceof ApiError && requestError.status === 400);
     } finally {
       setIsLoading(false);
     }
@@ -155,6 +142,7 @@ function App() {
     setCode('');
     setDevCode('');
     setError('');
+    setErrorDetails([]);
     setHasValidationError(false);
     setRetryAfterSeconds(0);
   };
@@ -216,6 +204,7 @@ function App() {
                 onChange={(event) => {
                   setPhone(formatPhone(event.target.value));
                   setError('');
+                  setErrorDetails([]);
                   setHasValidationError(false);
                 }}
                 disabled={isLoading}
@@ -224,7 +213,7 @@ function App() {
                 required
                 autoFocus
               />
-              {error && <p id="phone-error" className="form-error" role="alert">{error}</p>}
+              <FormError id="phone-error" message={error} details={errorDetails} />
             </div>
 
             <button
@@ -268,6 +257,7 @@ function App() {
                 onChange={(event) => {
                   setCode(event.target.value.replace(/\D/g, ''));
                   setError('');
+                  setErrorDetails([]);
                   setHasValidationError(false);
                 }}
                 disabled={isLoading}
@@ -276,7 +266,7 @@ function App() {
                 required
                 autoFocus
               />
-              {error && <p id="code-error" className="form-error" role="alert">{error}</p>}
+              <FormError id="code-error" message={error} details={errorDetails} />
             </div>
 
             <button className="login-button" type="submit" disabled={isLoading}>

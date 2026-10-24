@@ -296,6 +296,15 @@
   line-height: 1.35;
 }
 
+.form-error p {
+  margin: 0;
+}
+
+.form-error ul {
+  margin: 6px 0 0;
+  padding-left: 20px;
+}
+
 .sms-hint {
   margin: 8px 0 0;
   color: var(--color-text-grey);
