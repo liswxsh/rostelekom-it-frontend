@@ -158,50 +158,9 @@
   text-decoration: underline;
 }
 
-.login-tabs {
-  display: flex;
-  justify-content: center;
-  gap: 20px;
-  margin-bottom: 28px;
-}
-
 .login-fields {
   display: flex;
   flex-direction: column;
-}
-
-.tab {
-  position: relative;
-  padding: 0 0 9px;
-  border: none;
-  color: #333333;
-  background-color: transparent;
-  font-size: 17px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.tab::after {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  height: 3px;
-  border-radius: 3px;
-  background-color: transparent;
-  content: '';
-}
-
-.tab:hover {
-  color: var(--color-purple);
-}
-
-.tab-active {
-  color: var(--color-purple);
-}
-
-.tab-active::after {
-  background-color: var(--color-purple);
 }
 
 .form-input {
@@ -217,14 +176,12 @@
   font-weight: 600;
 }
 
-.form-input::placeholder,
-.password-field input::placeholder {
+.form-input::placeholder {
   color: var(--color-lavender);
   opacity: 1;
 }
 
-.form-input:focus,
-.password-field:focus-within {
+.form-input:focus {
   border-color: var(--color-purple);
   box-shadow: 0 0 0 3px rgb(119 0 255 / 10%);
 }
@@ -242,36 +199,6 @@
   color: #333333;
   font-size: 17px;
   font-weight: 700;
-}
-
-.form-input + .field-label,
-.form-input + .sms-label-row {
-  margin-top: 25px;
-}
-
-.sms-label-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-
-.sms-label-row .field-label {
-  margin: 0;
-}
-
-.request-code-button {
-  padding: 0;
-  border: none;
-  color: var(--color-purple);
-  background: transparent;
-  font-size: 15px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.request-code-button:hover {
-  text-decoration: underline;
 }
 
 .sms-code-input {
@@ -305,95 +232,6 @@
   padding-left: 20px;
 }
 
-.sms-hint {
-  margin: 8px 0 0;
-  color: var(--color-text-grey);
-  font-size: 14px;
-}
-
-.password-field {
-  display: flex;
-  width: 100%;
-  height: 56px;
-  align-items: center;
-  border: 1px solid var(--color-lavender);
-  border-radius: var(--radius-input);
-  background-color: var(--color-white);
-}
-
-.password-field input {
-  width: 100%;
-  height: 54px;
-  padding: 4px 16px 0;
-  border: none;
-  outline: none;
-  color: var(--color-black);
-  background-color: transparent;
-  font-size: 18px;
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: 2px;
-}
-
-.eye-button {
-  display: flex;
-  width: 52px;
-  height: 100%;
-  flex: 0 0 52px;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  color: var(--color-lavender);
-  background-color: transparent;
-}
-
-.eye-button svg {
-  width: 25px;
-  height: 25px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2.2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.form-options {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 10px;
-}
-
-.remember {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--color-black);
-  font-size: 16px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.remember input {
-  width: 20px;
-  height: 20px;
-  margin: 0;
-  accent-color: var(--color-purple);
-  cursor: pointer;
-}
-
-.form-options a {
-  color: var(--color-black);
-  font-size: 16px;
-  font-weight: 700;
-  text-decoration: none;
-}
-
-.form-options a:hover {
-  color: var(--color-purple);
-  text-decoration: underline;
-}
-
 .login-button {
   width: 100%;
   height: 52px;
@@ -421,48 +259,6 @@
 
 .login-button:active {
   transform: scale(0.99);
-}
-
-.register-text {
-  margin: 10px 0 0;
-  color: var(--color-text-grey);
-  font-size: 16px;
-  font-weight: 700;
-  text-align: center;
-}
-
-.register-text a {
-  color: var(--color-purple);
-  text-decoration: none;
-}
-
-.register-text a:hover {
-  text-decoration: underline;
-}
-
-.success-card {
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-}
-
-.success-card p {
-  margin: 14px 0 0;
-  color: var(--color-text-grey);
-  font-size: 17px;
-}
-
-.success-icon {
-  display: flex;
-  width: 64px;
-  height: 64px;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 24px;
-  border-radius: var(--radius-circle);
-  color: var(--color-white);
-  background-color: var(--color-purple);
-  font-size: 34px;
 }
 
 @media (max-width: 1100px) {
@@ -541,11 +337,6 @@
 
   .login-card h2 {
     font-size: 25px;
-  }
-
-  .form-options {
-    align-items: flex-start;
-    gap: 15px;
   }
 
   .login-button {

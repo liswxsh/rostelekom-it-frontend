@@ -63,14 +63,28 @@ function createApiError(response, data) {
   });
 }
 
-export async function postJson(path, body) {
+export async function requestJson(path, options = {}) {
+  const {
+    method = 'GET',
+    body,
+    auth = false,
+    headers: customHeaders = {},
+  } = options;
+  const headers = { ...customHeaders };
+
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  if (auth) {
+    const accessToken = localStorage.getItem('accessToken');
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+  }
+
   let response;
 
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {
     throw new ApiError(
@@ -78,11 +92,21 @@ export async function postJson(path, body) {
     );
   }
 
-  const data = await response.json().catch(() => ({}));
+  const data = response.status === 204
+    ? null
+    : await response.json().catch(() => ({}));
 
   if (!response.ok) {
     throw createApiError(response, data);
   }
 
   return data;
+}
+
+export function getJson(path, options = {}) {
+  return requestJson(path, { ...options, method: 'GET' });
+}
+
+export function postJson(path, body, options = {}) {
+  return requestJson(path, { ...options, method: 'POST', body });
 }

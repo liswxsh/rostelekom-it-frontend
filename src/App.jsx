@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import './App.css';
 import { ApiError, postJson } from './api.js';
+import Dashboard from './Dashboard.jsx';
 
 function formatPhone(value) {
   // Маска собирается по мере ввода цифр
@@ -54,6 +55,9 @@ function FormError({ id, message, details }) {
 
 function App() {
   const [step, setStep] = useState('phone');
+  const [isAuthenticated, setIsAuthenticated] = useState(
+    Boolean(localStorage.getItem('accessToken')),
+  );
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [devCode, setDevCode] = useState('');
@@ -130,7 +134,7 @@ function App() {
       });
       localStorage.setItem('accessToken', tokens.accessToken);
       localStorage.setItem('refreshToken', tokens.refreshToken);
-      setStep('success');
+      setIsAuthenticated(true);
     } catch (requestError) {
       setError(requestError.message);
       setErrorDetails(requestError instanceof ApiError ? requestError.details : []);
@@ -155,6 +159,19 @@ function App() {
     : isLoading
       ? 'Отправляем…'
       : 'Получить код';
+
+  const logout = useCallback(() => {
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+    setIsAuthenticated(false);
+    setStep('phone');
+    setPhone('');
+    setCode('');
+  }, []);
+
+  if (isAuthenticated) {
+    return <Dashboard onLogout={logout} />;
+  }
 
   return (
     <main className="login-page">
@@ -278,13 +295,6 @@ function App() {
           </form>
         )}
 
-        {step === 'success' && (
-          <section className="login-card success-card" aria-live="polite">
-            <div className="success-icon" aria-hidden="true">✓</div>
-            <h2>Вход выполнен</h2>
-            <p>Вы успешно вошли в личный кабинет.</p>
-          </section>
-        )}
       </section>
     </main>
   );
