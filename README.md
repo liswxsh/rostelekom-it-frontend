@@ -121,6 +121,7 @@ rostelekom-it-frontend/
 ## Используемые технологии
 
 - React 19;
+- React Helmet Async;
 - Vite 8;
 - JavaScript;
 - CSS;

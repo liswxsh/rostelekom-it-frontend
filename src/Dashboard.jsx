@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Helmet } from 'react-helmet-async';
 import { ApiError, getJson, postJson } from './api.js';
 import './Dashboard.css';
 
@@ -182,6 +183,10 @@ function Dashboard({ onLogout }) {
 
   return (
     <div className="dashboard-page">
+      <Helmet>
+        <title>Главная</title>
+      </Helmet>
+
       <header className="dashboard-header">
         <div className="header-content">
           <img className="dashboard-logo" src="/rostelecom-logo.png" alt="Ростелеком" />

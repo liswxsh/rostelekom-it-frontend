@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Helmet } from 'react-helmet-async';
 import './App.css';
 import { ApiError, postJson } from './api.js';
 import Dashboard from './Dashboard.jsx';
@@ -319,8 +320,13 @@ function App() {
   }
 
   return (
-    <main className="login-page">
-      <section className="promo-section">
+    <>
+      <Helmet>
+        <title>{step === 'register' ? 'Регистрация' : 'Вход'}</title>
+      </Helmet>
+
+      <main className="login-page">
+        <section className="promo-section">
         <img className="logo" src="/rostelecom-logo.png" alt="Ростелеком" />
 
         <div className="promo-content">
@@ -541,8 +547,9 @@ function App() {
           </form>
         )}
 
-      </section>
-    </main>
+        </section>
+      </main>
+    </>
   );
 }
 
