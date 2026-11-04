@@ -1,16 +1,127 @@
-# React + Vite
+# rostelekom-it-frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Фронтенд личного кабинета абонента Ростелекома. Пользователь входит по номеру телефона и коду из СМС, может зарегистрироваться, посмотреть профиль и лицевой счёт, пополнить баланс и увидеть последние операции.
 
-Currently, two official plugins are available:
+Проект написан на React и запускается через Vite. Все запросы отправляются в gateway бэкенда.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Как запустить
 
-## React Compiler
+Для запуска нужны Node.js, npm и работающий бэкенд на `http://localhost:8080`.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```powershell
+# 1. Перейти в папку фронтенда
+cd C:\rostelekom\rostelekom-it-frontend
 
-## Expanding the Oxlint configuration
+# 2. Установить зависимости
+npm install
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+# 3. Запустить проект
+npm run dev
+```
+
+После запуска сайт доступен по адресу `http://localhost:5173`.
+
+В режиме разработки Vite перенаправляет запросы с `/api` на `http://localhost:8080`. Если gateway запущен по другому адресу, можно создать файл `.env.local`:
+
+```env
+VITE_API_BASE_URL=http://localhost:8080
+```
+
+## Команды
+
+| Команда | Назначение |
+|---|---|
+| `npm run dev` | Запуск проекта в режиме разработки |
+| `npm run build` | Production-сборка в папку `dist` |
+| `npm run preview` | Локальный просмотр production-сборки |
+| `npm run lint` | Проверка кода через Oxlint |
+
+## Вход и регистрация
+
+Вход и регистрация начинаются одинаково:
+
+1. Пользователь вводит номер телефона в формате `+7 (999) 000-00-00`.
+2. Фронтенд запрашивает код подтверждения.
+3. Пользователь вводит шестизначный код из СМС.
+4. Если номер уже зарегистрирован, фронтенд сохраняет токены и открывает личный кабинет.
+5. Если номер новый, открывается форма регистрации. Фамилия и имя обязательны, отчество можно не указывать.
+6. После регистрации пользователь автоматически входит в личный кабинет.
+
+| Запрос | Назначение |
+|---|---|
+| `POST /api/auth/otp/request` | Запрос кода подтверждения |
+| `POST /api/auth/otp/verify` | Проверка номера и кода |
+| `POST /api/auth/register` | Регистрация нового пользователя |
+| `POST /api/auth/refresh` | Обновление пары токенов |
+| `POST /api/auth/logout` | Выход из аккаунта |
+
+Access-токен и refresh-токен хранятся в `localStorage`. Если access-токен истёк, фронтенд получает новую пару токенов через `/api/auth/refresh` и повторяет исходный запрос. При недействительном refresh-токене сессия очищается и открывается страница входа.
+
+Повторно запросить код можно после времени, указанного бэкендом в `resendAfterSeconds`. Если одноразовый токен регистрации истёк, пользователь возвращается к вводу номера.
+
+## Личный кабинет
+
+После успешного входа фронтенд загружает профиль и лицевой счёт пользователя.
+
+| Запрос | Назначение |
+|---|---|
+| `GET /api/users/me` | Данные текущего пользователя |
+| `GET /api/billing/accounts/me` | Лицевой счёт и баланс |
+| `POST /api/billing/accounts` | Открытие лицевого счёта |
+| `GET /api/billing/accounts/me/transactions?size=6` | Последние операции |
+| `POST /api/billing/payments` | Создание пополнения баланса |
+
+На главной странице отображаются:
+
+- приветствие и данные пользователя;
+- текущий баланс и номер лицевого счёта;
+- форма пополнения баланса;
+- последние операции;
+- переход на страницу тарифов.
+
+Страница тарифов пока содержит заглушку.
+
+## Обработка ошибок
+
+Фронтенд поддерживает формат ошибок бэкенда `Problem Details`:
+
+```json
+{
+  "title": "Not Found",
+  "status": 404,
+  "detail": "Счёт не найден",
+  "instance": "/api/billing/accounts/me",
+  "errors": {
+    "amount": "Сумма должна быть больше нуля"
+  }
+}
+```
+
+Пользователю показывается текст из `detail` и сообщения валидации из `errors`. Для сетевых ошибок и ответов без понятного описания используются сообщения фронтенда.
+
+## Структура проекта
+
+```text
+rostelekom-it-frontend/
+├── public/
+│   └── rostelecom-logo.png   # логотип
+├── src/
+│   ├── App.jsx               # вход, подтверждение кода и регистрация
+│   ├── App.css               # стили страницы авторизации
+│   ├── Dashboard.jsx         # личный кабинет
+│   ├── Dashboard.css         # стили личного кабинета
+│   ├── api.js                # запросы, ошибки и обновление токенов
+│   ├── index.css             # общие стили и переменные
+│   └── main.jsx              # точка входа React
+├── index.html
+├── package.json
+└── vite.config.js            # настройка Vite и proxy для API
+```
+
+## Используемые технологии
+
+- React 19;
+- Vite 8;
+- JavaScript;
+- CSS;
+- Oxlint.
