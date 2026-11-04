@@ -41,14 +41,22 @@ function isValidPhone(value) {
 function isValidName(value, required = true) {
   const name = value.trim();
   if (!name) return !required;
-  return /^[\p{L}]+(?:[ '\u2019-][\p{L}]+)*$/u.test(name) && name.length <= 100;
+  return /^[\p{Lu}][\p{L}]*(?:[ '\u2019-][\p{Lu}][\p{L}]*)*$/u.test(name)
+    && name.length <= 100;
 }
 
-function FormError({ id, message, details }) {
+function formatName(value) {
+  return value
+    .trim()
+    .toLocaleLowerCase('ru-RU')
+    .replace(/(^|[ '\u2019-])\p{L}/gu, (part) => part.toLocaleUpperCase('ru-RU'));
+}
+
+function FormError({ id, message, details = [] }) {
   if (!message) return null;
 
   return (
-    <div id={id} className="form-error" role="alert">
+    <div id={id} className="form-alert" role="alert">
       <p>{message}</p>
       {details.length > 0 && (
         <ul>
@@ -57,6 +65,11 @@ function FormError({ id, message, details }) {
       )}
     </div>
   );
+}
+
+function FieldError({ id, message }) {
+  if (!message) return null;
+  return <p id={id} className="field-error" role="alert">{message}</p>;
 }
 
 function App() {
@@ -69,13 +82,30 @@ function App() {
   const [devCode, setDevCode] = useState('');
   const [error, setError] = useState('');
   const [errorDetails, setErrorDetails] = useState([]);
-  const [hasValidationError, setHasValidationError] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [retryAfterSeconds, setRetryAfterSeconds] = useState(0);
   const [registrationToken, setRegistrationToken] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [middleName, setMiddleName] = useState('');
+
+  const showRequestError = (requestError) => {
+    const receivedErrors = requestError instanceof ApiError ? requestError.fieldErrors : {};
+    const visibleFields = ['phone', 'code', 'lastName', 'firstName', 'middleName'];
+    const errors = Object.fromEntries(
+      Object.entries(receivedErrors).filter(([field]) => visibleFields.includes(field)),
+    );
+    setFieldErrors(errors);
+
+    if (Object.keys(errors).length > 0) {
+      setError('');
+      setErrorDetails([]);
+    } else {
+      setError(requestError.message || 'Не удалось выполнить запрос');
+      setErrorDetails(requestError instanceof ApiError ? requestError.details : []);
+    }
+  };
 
   useEffect(() => {
     if (retryAfterSeconds <= 0) return undefined;
@@ -92,11 +122,10 @@ function App() {
     event.preventDefault();
     setError('');
     setErrorDetails([]);
-    setHasValidationError(false);
+    setFieldErrors({});
 
     if (!isValidPhone(phone)) {
-      setError('Введите номер полностью в формате +7 (999) 000-00-00');
-      setHasValidationError(true);
+      setFieldErrors({ phone: 'Введите номер полностью: +7 (999) 000-00-00' });
       return;
     }
 
@@ -115,9 +144,7 @@ function App() {
       if (requestError instanceof ApiError && requestError.retryAfterSeconds > 0) {
         setRetryAfterSeconds(requestError.retryAfterSeconds);
       } else {
-        setError(requestError.message);
-        setErrorDetails(requestError instanceof ApiError ? requestError.details : []);
-        setHasValidationError(requestError instanceof ApiError && requestError.status === 400);
+        showRequestError(requestError);
       }
     } finally {
       setIsLoading(false);
@@ -127,6 +154,7 @@ function App() {
   const resendCode = async () => {
     setError('');
     setErrorDetails([]);
+    setFieldErrors({});
     setIsLoading(true);
 
     try {
@@ -137,8 +165,7 @@ function App() {
       setCode('');
       setRetryAfterSeconds(Number(challenge.resendAfterSeconds) || 0);
     } catch (requestError) {
-      setError(requestError.message);
-      setErrorDetails(requestError instanceof ApiError ? requestError.details : []);
+      showRequestError(requestError);
       if (requestError instanceof ApiError && requestError.retryAfterSeconds > 0) {
         setRetryAfterSeconds(requestError.retryAfterSeconds);
       }
@@ -151,11 +178,10 @@ function App() {
     event.preventDefault();
     setError('');
     setErrorDetails([]);
-    setHasValidationError(false);
+    setFieldErrors({});
 
     if (!/^\d{6}$/.test(code)) {
-      setError('Код подтверждения должен состоять из 6 цифр');
-      setHasValidationError(true);
+      setFieldErrors({ code: 'Введите шестизначный код' });
       return;
     }
 
@@ -179,9 +205,16 @@ function App() {
         setError(requestError.message);
         return;
       }
-      setError(requestError.message);
-      setErrorDetails(requestError instanceof ApiError ? requestError.details : []);
-      setHasValidationError(requestError instanceof ApiError && requestError.status === 400);
+
+      if (requestError instanceof ApiError && requestError.status === 400) {
+        setError('');
+        setErrorDetails([]);
+        setFieldErrors({
+          code: requestError.fieldErrors.code || requestError.message,
+        });
+      } else {
+        showRequestError(requestError);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -197,11 +230,29 @@ function App() {
     event.preventDefault();
     setError('');
     setErrorDetails([]);
-    setHasValidationError(false);
+    setFieldErrors({});
 
-    if (!isValidName(lastName) || !isValidName(firstName) || !isValidName(middleName, false)) {
-      setError('Введите имя и фамилию буквами. Допустимы пробел, дефис и апостроф');
-      setHasValidationError(true);
+    const formattedLastName = formatName(lastName);
+    const formattedFirstName = formatName(firstName);
+    const formattedMiddleName = formatName(middleName);
+
+    setLastName(formattedLastName);
+    setFirstName(formattedFirstName);
+    setMiddleName(formattedMiddleName);
+
+    const nameErrors = {};
+    if (!isValidName(formattedLastName)) {
+      nameErrors.lastName = 'Начните фамилию с заглавной буквы';
+    }
+    if (!isValidName(formattedFirstName)) {
+      nameErrors.firstName = 'Начните имя с заглавной буквы';
+    }
+    if (!isValidName(formattedMiddleName, false)) {
+      nameErrors.middleName = 'Начните отчество с заглавной буквы';
+    }
+
+    if (Object.keys(nameErrors).length > 0) {
+      setFieldErrors(nameErrors);
       return;
     }
 
@@ -210,9 +261,9 @@ function App() {
     try {
       const tokens = await postJson('/api/auth/register', {
         registrationToken,
-        lastName: lastName.trim(),
-        firstName: firstName.trim(),
-        middleName: middleName.trim() || null,
+        lastName: formattedLastName,
+        firstName: formattedFirstName,
+        middleName: formattedMiddleName || null,
       });
       saveTokens(tokens);
     } catch (requestError) {
@@ -221,9 +272,7 @@ function App() {
         setError(requestError.message);
         return;
       }
-      setError(requestError.message);
-      setErrorDetails(requestError instanceof ApiError ? requestError.details : []);
-      setHasValidationError(requestError instanceof ApiError && requestError.status === 400);
+      showRequestError(requestError);
     } finally {
       setIsLoading(false);
     }
@@ -235,7 +284,7 @@ function App() {
     setDevCode('');
     setError('');
     setErrorDetails([]);
-    setHasValidationError(false);
+    setFieldErrors({});
     setRetryAfterSeconds(0);
     setRegistrationToken('');
   };
@@ -256,7 +305,7 @@ function App() {
     setDevCode('');
     setError('');
     setErrorDetails([]);
-    setHasValidationError(false);
+    setFieldErrors({});
     setIsLoading(false);
     setRetryAfterSeconds(0);
     setRegistrationToken('');
@@ -304,6 +353,8 @@ function App() {
               <p>Введите номер телефона. Для нового номера регистрация откроется после подтверждения кода</p>
             </div>
 
+            <FormError id="phone-form-error" message={error} details={errorDetails} />
+
             <div className="login-fields">
               <label className="field-label" htmlFor="phone">Номер телефона</label>
               <input
@@ -321,15 +372,15 @@ function App() {
                   setPhone(formatPhone(event.target.value));
                   setError('');
                   setErrorDetails([]);
-                  setHasValidationError(false);
+                  setFieldErrors((current) => ({ ...current, phone: '' }));
                 }}
                 disabled={isLoading}
-                aria-invalid={hasValidationError}
-                aria-describedby={error ? 'phone-error' : undefined}
+                aria-invalid={Boolean(fieldErrors.phone)}
+                aria-describedby={fieldErrors.phone ? 'phone-error' : undefined}
                 required
                 autoFocus
               />
-              <FormError id="phone-error" message={error} details={errorDetails} />
+              <FieldError id="phone-error" message={fieldErrors.phone} />
             </div>
 
             <button
@@ -353,6 +404,8 @@ function App() {
               </button>
             </div>
 
+            <FormError id="code-form-error" message={error} details={errorDetails} />
+
             <div className="login-fields">
               {devCode && (
                 <p className="dev-code" role="status">
@@ -375,15 +428,15 @@ function App() {
                   setCode(event.target.value.replace(/\D/g, ''));
                   setError('');
                   setErrorDetails([]);
-                  setHasValidationError(false);
+                  setFieldErrors((current) => ({ ...current, code: '' }));
                 }}
                 disabled={isLoading}
-                aria-invalid={hasValidationError}
-                aria-describedby={error ? 'code-error' : undefined}
+                aria-invalid={Boolean(fieldErrors.code)}
+                aria-describedby={fieldErrors.code ? 'code-error' : undefined}
                 required
                 autoFocus
               />
-              <FormError id="code-error" message={error} details={errorDetails} />
+              <FieldError id="code-error" message={fieldErrors.code} />
             </div>
 
             <button className="login-button" type="submit" disabled={isLoading}>
@@ -409,56 +462,77 @@ function App() {
               <p>Номер <strong>{phone}</strong> подтверждён. Заполните данные профиля</p>
             </div>
 
+            <FormError id="registration-error" message={error} details={errorDetails} />
+
             <div className="login-fields registration-fields">
               <label className="field-label" htmlFor="last-name">Фамилия</label>
               <input
                 id="last-name"
                 className="form-input"
                 autoComplete="family-name"
+                autoCapitalize="words"
                 maxLength={100}
+                placeholder="Иванов"
                 value={lastName}
                 onChange={(event) => {
                   setLastName(event.target.value);
                   setError('');
                   setErrorDetails([]);
+                  setFieldErrors((current) => ({ ...current, lastName: '' }));
                 }}
+                onBlur={() => setLastName(formatName(lastName))}
                 disabled={isLoading}
+                aria-invalid={Boolean(fieldErrors.lastName)}
+                aria-describedby={fieldErrors.lastName ? 'last-name-error' : undefined}
                 required
                 autoFocus
               />
+              <FieldError id="last-name-error" message={fieldErrors.lastName} />
 
               <label className="field-label" htmlFor="first-name">Имя</label>
               <input
                 id="first-name"
                 className="form-input"
                 autoComplete="given-name"
+                autoCapitalize="words"
                 maxLength={100}
+                placeholder="Иван"
                 value={firstName}
                 onChange={(event) => {
                   setFirstName(event.target.value);
                   setError('');
                   setErrorDetails([]);
+                  setFieldErrors((current) => ({ ...current, firstName: '' }));
                 }}
+                onBlur={() => setFirstName(formatName(firstName))}
                 disabled={isLoading}
+                aria-invalid={Boolean(fieldErrors.firstName)}
+                aria-describedby={fieldErrors.firstName ? 'first-name-error' : undefined}
                 required
               />
+              <FieldError id="first-name-error" message={fieldErrors.firstName} />
 
               <label className="field-label" htmlFor="middle-name">Отчество <span>(необязательно)</span></label>
               <input
                 id="middle-name"
                 className="form-input"
                 autoComplete="additional-name"
+                autoCapitalize="words"
                 maxLength={100}
+                placeholder="Иванович"
                 value={middleName}
                 onChange={(event) => {
                   setMiddleName(event.target.value);
                   setError('');
                   setErrorDetails([]);
+                  setFieldErrors((current) => ({ ...current, middleName: '' }));
                 }}
+                onBlur={() => setMiddleName(formatName(middleName))}
                 disabled={isLoading}
+                aria-invalid={Boolean(fieldErrors.middleName)}
+                aria-describedby={fieldErrors.middleName ? 'middle-name-error' : undefined}
               />
-
-              <FormError id="registration-error" message={error} details={errorDetails} />
+              <FieldError id="middle-name-error" message={fieldErrors.middleName} />
             </div>
 
             <button className="login-button" type="submit" disabled={isLoading}>

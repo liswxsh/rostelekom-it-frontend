@@ -28,12 +28,27 @@ function extractErrorMessages(errors) {
   return [];
 }
 
+function extractFieldErrors(errors) {
+  if (Array.isArray(errors)) {
+    return Object.assign({}, ...errors.map(extractFieldErrors));
+  }
+
+  if (!errors || typeof errors !== 'object') return {};
+
+  return Object.fromEntries(
+    Object.entries(errors)
+      .map(([field, value]) => [field, extractErrorMessages(value)[0]])
+      .filter(([, message]) => Boolean(message)),
+  );
+}
+
 export class ApiError extends Error {
   constructor(message, options = {}) {
     super(message);
     this.name = 'ApiError';
     this.status = options.status ?? 0;
     this.details = options.details ?? [];
+    this.fieldErrors = options.fieldErrors ?? {};
     this.retryAfterSeconds = options.retryAfterSeconds ?? 0;
     this.instance = options.instance ?? '';
     this.reason = options.reason ?? '';
@@ -57,6 +72,7 @@ function createApiError(response, data) {
   return new ApiError(message, {
     status: response.status,
     details: validationMessages.filter((item) => item !== message),
+    fieldErrors: extractFieldErrors(problem.errors),
     retryAfterSeconds: Number(
       problem.retryAfterSeconds || response.headers.get('Retry-After') || 0,
     ),
