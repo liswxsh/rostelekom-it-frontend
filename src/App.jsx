@@ -38,6 +38,12 @@ function isValidPhone(value) {
   return /^\+7\d{10}$/.test(normalizePhone(value));
 }
 
+function isValidName(value, required = true) {
+  const name = value.trim();
+  if (!name) return !required;
+  return /^[\p{L}]+(?:[ '\u2019-][\p{L}]+)*$/u.test(name) && name.length <= 100;
+}
+
 function FormError({ id, message, details }) {
   if (!message) return null;
 
@@ -66,6 +72,10 @@ function App() {
   const [hasValidationError, setHasValidationError] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [retryAfterSeconds, setRetryAfterSeconds] = useState(0);
+  const [registrationToken, setRegistrationToken] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [middleName, setMiddleName] = useState('');
 
   useEffect(() => {
     if (retryAfterSeconds <= 0) return undefined;
@@ -99,6 +109,7 @@ function App() {
       setPhone(formatPhone(challenge.phone || phone));
       setDevCode(challenge.code || '');
       setCode('');
+      setRetryAfterSeconds(Number(challenge.resendAfterSeconds) || 0);
       setStep('code');
     } catch (requestError) {
       if (requestError instanceof ApiError && requestError.retryAfterSeconds > 0) {
@@ -107,6 +118,29 @@ function App() {
         setError(requestError.message);
         setErrorDetails(requestError instanceof ApiError ? requestError.details : []);
         setHasValidationError(requestError instanceof ApiError && requestError.status === 400);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const resendCode = async () => {
+    setError('');
+    setErrorDetails([]);
+    setIsLoading(true);
+
+    try {
+      const challenge = await postJson('/api/auth/otp/request', {
+        phone: normalizePhone(phone),
+      });
+      setDevCode(challenge.code || '');
+      setCode('');
+      setRetryAfterSeconds(Number(challenge.resendAfterSeconds) || 0);
+    } catch (requestError) {
+      setError(requestError.message);
+      setErrorDetails(requestError instanceof ApiError ? requestError.details : []);
+      if (requestError instanceof ApiError && requestError.retryAfterSeconds > 0) {
+        setRetryAfterSeconds(requestError.retryAfterSeconds);
       }
     } finally {
       setIsLoading(false);
@@ -128,14 +162,65 @@ function App() {
     setIsLoading(true);
 
     try {
-      const tokens = await postJson('/api/auth/otp/verify', {
+      const result = await postJson('/api/auth/otp/verify', {
         phone: normalizePhone(phone),
         code,
       });
-      localStorage.setItem('accessToken', tokens.accessToken);
-      localStorage.setItem('refreshToken', tokens.refreshToken);
-      setIsAuthenticated(true);
+
+      if (result.registrationToken) {
+        setRegistrationToken(result.registrationToken);
+        setStep('register');
+      } else {
+        saveTokens(result);
+      }
     } catch (requestError) {
+      if (requestError instanceof ApiError && requestError.reason === 'NOT_REQUESTED') {
+        changePhone();
+        setError(requestError.message);
+        return;
+      }
+      setError(requestError.message);
+      setErrorDetails(requestError instanceof ApiError ? requestError.details : []);
+      setHasValidationError(requestError instanceof ApiError && requestError.status === 400);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const saveTokens = (tokens) => {
+    localStorage.setItem('accessToken', tokens.accessToken);
+    localStorage.setItem('refreshToken', tokens.refreshToken);
+    setIsAuthenticated(true);
+  };
+
+  const register = async (event) => {
+    event.preventDefault();
+    setError('');
+    setErrorDetails([]);
+    setHasValidationError(false);
+
+    if (!isValidName(lastName) || !isValidName(firstName) || !isValidName(middleName, false)) {
+      setError('Введите имя и фамилию буквами. Допустимы пробел, дефис и апостроф');
+      setHasValidationError(true);
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const tokens = await postJson('/api/auth/register', {
+        registrationToken,
+        lastName: lastName.trim(),
+        firstName: firstName.trim(),
+        middleName: middleName.trim() || null,
+      });
+      saveTokens(tokens);
+    } catch (requestError) {
+      if (requestError instanceof ApiError && requestError.reason === 'NOT_REQUESTED') {
+        changePhone();
+        setError(requestError.message);
+        return;
+      }
       setError(requestError.message);
       setErrorDetails(requestError instanceof ApiError ? requestError.details : []);
       setHasValidationError(requestError instanceof ApiError && requestError.status === 400);
@@ -152,6 +237,7 @@ function App() {
     setErrorDetails([]);
     setHasValidationError(false);
     setRetryAfterSeconds(0);
+    setRegistrationToken('');
   };
 
   const requestButtonText = retryAfterSeconds > 0
@@ -167,6 +253,16 @@ function App() {
     setStep('phone');
     setPhone('');
     setCode('');
+    setDevCode('');
+    setError('');
+    setErrorDetails([]);
+    setHasValidationError(false);
+    setIsLoading(false);
+    setRetryAfterSeconds(0);
+    setRegistrationToken('');
+    setFirstName('');
+    setLastName('');
+    setMiddleName('');
   }, []);
 
   if (isAuthenticated) {
@@ -205,7 +301,7 @@ function App() {
           <form className="login-card" onSubmit={requestCode} noValidate>
             <div className="form-heading">
               <h2>Вход в личный кабинет</h2>
-              <p>Введите номер телефона, привязанный к лицевому счёту</p>
+              <p>Введите номер телефона. Для нового номера регистрация откроется после подтверждения кода</p>
             </div>
 
             <div className="login-fields">
@@ -243,6 +339,7 @@ function App() {
             >
               {requestButtonText}
             </button>
+
           </form>
         )}
 
@@ -290,7 +387,82 @@ function App() {
             </div>
 
             <button className="login-button" type="submit" disabled={isLoading}>
-              {isLoading ? 'Проверяем…' : 'Войти'}
+              {isLoading ? 'Проверяем…' : 'Продолжить'}
+            </button>
+            <button
+              className="resend-code-button"
+              type="button"
+              onClick={resendCode}
+              disabled={isLoading || retryAfterSeconds > 0}
+            >
+              {retryAfterSeconds > 0
+                ? `Отправить код повторно через ${retryAfterSeconds} сек.`
+                : 'Отправить код повторно'}
+            </button>
+          </form>
+        )}
+
+        {step === 'register' && (
+          <form className="login-card registration-card" onSubmit={register} noValidate>
+            <div className="form-heading">
+              <h2>Создание аккаунта</h2>
+              <p>Номер <strong>{phone}</strong> подтверждён. Заполните данные профиля</p>
+            </div>
+
+            <div className="login-fields registration-fields">
+              <label className="field-label" htmlFor="last-name">Фамилия</label>
+              <input
+                id="last-name"
+                className="form-input"
+                autoComplete="family-name"
+                maxLength={100}
+                value={lastName}
+                onChange={(event) => {
+                  setLastName(event.target.value);
+                  setError('');
+                  setErrorDetails([]);
+                }}
+                disabled={isLoading}
+                required
+                autoFocus
+              />
+
+              <label className="field-label" htmlFor="first-name">Имя</label>
+              <input
+                id="first-name"
+                className="form-input"
+                autoComplete="given-name"
+                maxLength={100}
+                value={firstName}
+                onChange={(event) => {
+                  setFirstName(event.target.value);
+                  setError('');
+                  setErrorDetails([]);
+                }}
+                disabled={isLoading}
+                required
+              />
+
+              <label className="field-label" htmlFor="middle-name">Отчество <span>(необязательно)</span></label>
+              <input
+                id="middle-name"
+                className="form-input"
+                autoComplete="additional-name"
+                maxLength={100}
+                value={middleName}
+                onChange={(event) => {
+                  setMiddleName(event.target.value);
+                  setError('');
+                  setErrorDetails([]);
+                }}
+                disabled={isLoading}
+              />
+
+              <FormError id="registration-error" message={error} details={errorDetails} />
+            </div>
+
+            <button className="login-button" type="submit" disabled={isLoading}>
+              {isLoading ? 'Создаём аккаунт…' : 'Зарегистрироваться'}
             </button>
           </form>
         )}

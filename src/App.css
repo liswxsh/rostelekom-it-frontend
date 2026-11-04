@@ -139,7 +139,7 @@
 .form-heading p {
   margin: 12px 0 0;
   color: var(--color-text-grey);
-  font-size: 14px;
+  font-size: 16px;
   line-height: 1.45;
 }
 
@@ -156,6 +156,21 @@
 
 .change-phone-button:hover {
   text-decoration: underline;
+}
+
+.resend-code-button {
+  margin-top: 14px;
+  padding: 0;
+  border: 0;
+  color: var(--color-purple);
+  background: transparent;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.resend-code-button:disabled {
+  color: var(--color-text-grey);
+  cursor: pointer;
 }
 
 .login-fields {
@@ -199,6 +214,20 @@
   color: #333333;
   font-size: 17px;
   font-weight: 700;
+}
+
+.field-label span {
+  color: var(--color-text-grey);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.registration-fields {
+  gap: 10px;
+}
+
+.registration-fields .field-label:not(:first-child) {
+  margin-top: 4px;
 }
 
 .sms-code-input {
@@ -259,6 +288,10 @@
 
 .login-button:active {
   transform: scale(0.99);
+}
+
+.registration-card {
+  padding-top: 42px;
 }
 
 @media (max-width: 1100px) {

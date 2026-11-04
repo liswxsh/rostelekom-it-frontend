@@ -36,6 +36,7 @@ export class ApiError extends Error {
     this.details = options.details ?? [];
     this.retryAfterSeconds = options.retryAfterSeconds ?? 0;
     this.instance = options.instance ?? '';
+    this.reason = options.reason ?? '';
   }
 }
 
@@ -60,7 +61,53 @@ function createApiError(response, data) {
       problem.retryAfterSeconds || response.headers.get('Retry-After') || 0,
     ),
     instance: problem.instance,
+    reason: problem.reason,
   });
+}
+
+let refreshPromise;
+
+async function refreshTokens() {
+  if (refreshPromise) return refreshPromise;
+
+  const previousRefreshToken = localStorage.getItem('refreshToken');
+  if (!previousRefreshToken) throw new ApiError('Необходимо войти в систему.', { status: 401 });
+
+  const updateTokens = async () => {
+    const currentRefreshToken = localStorage.getItem('refreshToken');
+
+    // Другая вкладка уже успела обновить одноразовый refresh-токен
+    if (currentRefreshToken !== previousRefreshToken) {
+      return localStorage.getItem('accessToken');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: currentRefreshToken }),
+    });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw createApiError(response, data);
+      localStorage.setItem('accessToken', data.accessToken);
+      localStorage.setItem('refreshToken', data.refreshToken);
+      return data.accessToken;
+  };
+
+  const refresh = navigator.locks
+    ? navigator.locks.request('rostelekom-auth-refresh', updateTokens)
+    : updateTokens();
+
+  refreshPromise = refresh
+    .catch((error) => {
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      throw error;
+    })
+    .finally(() => {
+      refreshPromise = undefined;
+    });
+
+  return refreshPromise;
 }
 
 export async function requestJson(path, options = {}) {
@@ -95,6 +142,15 @@ export async function requestJson(path, options = {}) {
   const data = response.status === 204
     ? null
     : await response.json().catch(() => ({}));
+
+  if (response.status === 401 && auth) {
+    const accessToken = await refreshTokens();
+    return requestJson(path, {
+      ...options,
+      auth: false,
+      headers: { ...customHeaders, Authorization: `Bearer ${accessToken}` },
+    });
+  }
 
   if (!response.ok) {
     throw createApiError(response, data);
