@@ -97,16 +97,25 @@ async function refreshTokens() {
       return localStorage.getItem('accessToken');
     }
 
-    const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken: currentRefreshToken }),
-    });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw createApiError(response, data);
-      localStorage.setItem('accessToken', data.accessToken);
-      localStorage.setItem('refreshToken', data.refreshToken);
-      return data.accessToken;
+    let response;
+
+    try {
+      response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: currentRefreshToken }),
+      });
+    } catch {
+      throw new ApiError(
+        'Не удалось подключиться к серверу. Проверьте соединение и попробуйте ещё раз.',
+      );
+    }
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw createApiError(response, data);
+    localStorage.setItem('accessToken', data.accessToken);
+    localStorage.setItem('refreshToken', data.refreshToken);
+    return data.accessToken;
   };
 
   const refresh = navigator.locks
@@ -115,8 +124,10 @@ async function refreshTokens() {
 
   refreshPromise = refresh
     .catch((error) => {
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
+      if (error instanceof ApiError && [400, 401].includes(error.status)) {
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+      }
       throw error;
     })
     .finally(() => {

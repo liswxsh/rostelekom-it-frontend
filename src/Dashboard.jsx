@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { ApiError, getJson, postJson } from './api.js';
 import './Dashboard.css';
@@ -53,6 +53,8 @@ function Dashboard({ onLogout }) {
   const [account, setAccount] = useState(undefined);
   const [transactions, setTransactions] = useState([]);
   const [amount, setAmount] = useState('');
+  const [idempotencyKey, setIdempotencyKey] = useState('');
+  const idempotencyKeyRef = useRef('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -83,10 +85,15 @@ function Dashboard({ onLogout }) {
       setAccount(userAccount);
 
       if (userAccount) {
-        const history = await getJson('/api/billing/accounts/me/transactions?size=6', {
-          auth: true,
-        });
-        setTransactions(history.content || []);
+        try {
+          const history = await getJson('/api/billing/accounts/me/transactions?size=6', {
+            auth: true,
+          });
+          setTransactions(history.content || []);
+        } catch (historyError) {
+          setTransactions([]);
+          handleError(historyError);
+        }
       } else {
         setTransactions([]);
       }
@@ -137,13 +144,20 @@ function Dashboard({ onLogout }) {
     setError('');
     setNotice('');
 
+    let paymentKey = idempotencyKeyRef.current || idempotencyKey;
+    if (!paymentKey) {
+      paymentKey = crypto.randomUUID();
+      idempotencyKeyRef.current = paymentKey;
+      setIdempotencyKey(paymentKey);
+    }
+
     try {
       const payment = await postJson(
         '/api/billing/payments',
         { amount: Number(normalizedAmount) },
         {
           auth: true,
-          headers: { 'Idempotency-Key': crypto.randomUUID() },
+          headers: { 'Idempotency-Key': paymentKey },
         },
       );
 
@@ -156,6 +170,8 @@ function Dashboard({ onLogout }) {
       }
 
       setAmount('');
+      setIdempotencyKey('');
+      idempotencyKeyRef.current = '';
       await loadData(false);
       setNotice('Баланс успешно пополнен');
     } catch (requestError) {
@@ -170,6 +186,8 @@ function Dashboard({ onLogout }) {
 
     try {
       if (refreshToken) await postJson('/api/auth/logout', { refreshToken });
+    } catch {
+      // Локальный выход должен работать, даже если сервер недоступен
     } finally {
       onLogout();
     }
@@ -283,6 +301,8 @@ function Dashboard({ onLogout }) {
                       value={amount}
                       onChange={(event) => {
                         setAmount(event.target.value.replace(/[^\d.,]/g, ''));
+                        setIdempotencyKey('');
+                        idempotencyKeyRef.current = '';
                         setError('');
                         setNotice('');
                       }}
