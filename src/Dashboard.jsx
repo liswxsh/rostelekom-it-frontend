@@ -15,6 +15,10 @@ const TRANSACTION_TYPES = {
   REFUND: { label: 'Возврат', sign: '+', className: 'income' },
 };
 
+const PENDING_PAYMENT_KEY = 'pendingPaymentId';
+const PAYMENT_POLL_INTERVAL = 3000;
+const PAYMENT_POLL_ATTEMPTS = 20;
+
 function formatMoney(value, currency = 'RUB') {
   return new Intl.NumberFormat('ru-RU', {
     style: 'currency',
@@ -57,6 +61,7 @@ function Dashboard({ onLogout }) {
   const idempotencyKeyRef = useRef('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [paymentMessage, setPaymentMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -104,10 +109,79 @@ function Dashboard({ onLogout }) {
     }
   }, [handleError]);
 
+  const checkPendingPayment = useCallback(async () => {
+    const paymentId = localStorage.getItem(PENDING_PAYMENT_KEY);
+    if (!paymentId) return 'NONE';
+
+    try {
+      const payment = await getJson(`/api/billing/payments/${paymentId}`, { auth: true });
+
+      if (payment.status === 'SUCCEEDED') {
+        localStorage.removeItem(PENDING_PAYMENT_KEY);
+        setPaymentMessage('');
+        await loadData(false);
+        setNotice('Баланс успешно пополнен');
+        return 'SUCCEEDED';
+      }
+
+      if (payment.status === 'CANCELED') {
+        localStorage.removeItem(PENDING_PAYMENT_KEY);
+        setPaymentMessage('');
+        setError('Платёж отменён. Деньги на баланс не зачислены.');
+        return 'CANCELED';
+      }
+
+      if (payment.status === 'REFUND_REQUIRED') {
+        localStorage.removeItem(PENDING_PAYMENT_KEY);
+        setPaymentMessage('');
+        setError('Платёж оплачен, но счёт закрыт. Обратитесь в поддержку для возврата.');
+        return 'REFUND_REQUIRED';
+      }
+
+      setPaymentMessage('Платёж обрабатывается. Баланс обновится после подтверждения оплаты.');
+      return 'PENDING';
+    } catch (requestError) {
+      if (requestError instanceof ApiError && requestError.status === 404) {
+        localStorage.removeItem(PENDING_PAYMENT_KEY);
+      }
+      handleError(requestError);
+      return 'ERROR';
+    }
+  }, [handleError, loadData]);
+
   useEffect(() => {
     const timer = window.setTimeout(loadData, 0);
     return () => window.clearTimeout(timer);
   }, [loadData]);
+
+  useEffect(() => {
+    if (!localStorage.getItem(PENDING_PAYMENT_KEY)) return undefined;
+
+    if (window.location.pathname === '/payments/return') {
+      window.history.replaceState({}, '', '/');
+    }
+
+    let isActive = true;
+    let timer;
+
+    const pollPayment = async (attempt = 0) => {
+      const status = await checkPendingPayment();
+      if (!isActive || status !== 'PENDING') return;
+
+      if (attempt + 1 < PAYMENT_POLL_ATTEMPTS) {
+        timer = window.setTimeout(() => pollPayment(attempt + 1), PAYMENT_POLL_INTERVAL);
+      } else {
+        setPaymentMessage('Платёж ещё обрабатывается. Обновите страницу немного позже.');
+      }
+    };
+
+    pollPayment();
+
+    return () => {
+      isActive = false;
+      window.clearTimeout(timer);
+    };
+  }, [checkPendingPayment]);
 
   useEffect(() => {
     if (!notice) return undefined;
@@ -162,11 +236,27 @@ function Dashboard({ onLogout }) {
       );
 
       if (payment.confirmationUrl?.startsWith('/api/')) {
-        // Пока подтверждаем оплату через заглушку бэкенда
-        await postJson(payment.confirmationUrl, undefined, { auth: true });
+        const confirmedPayment = await postJson(payment.confirmationUrl, undefined, { auth: true });
+        if (confirmedPayment.status !== 'SUCCEEDED') {
+          throw new Error('Не удалось подтвердить пополнение баланса');
+        }
       } else if (payment.confirmationUrl) {
-        window.location.assign(payment.confirmationUrl);
+        let confirmationUrl;
+        try {
+          confirmationUrl = new URL(payment.confirmationUrl);
+        } catch {
+          throw new Error('Сервис оплаты вернул некорректную ссылку');
+        }
+
+        if (!['http:', 'https:'].includes(confirmationUrl.protocol)) {
+          throw new Error('Сервис оплаты вернул некорректную ссылку');
+        }
+
+        localStorage.setItem(PENDING_PAYMENT_KEY, payment.id);
+        window.location.assign(confirmationUrl.href);
         return;
+      } else {
+        throw new Error('Сервис оплаты не вернул ссылку для подтверждения');
       }
 
       setAmount('');
@@ -189,6 +279,7 @@ function Dashboard({ onLogout }) {
     } catch {
       // Локальный выход должен работать, даже если сервер недоступен
     } finally {
+      localStorage.removeItem(PENDING_PAYMENT_KEY);
       onLogout();
     }
   };
@@ -248,7 +339,7 @@ function Dashboard({ onLogout }) {
             type="button"
             onClick={() => {
               setNotice('');
-              loadData();
+              loadData().then(checkPendingPayment);
             }}
           >
             Обновить
@@ -257,6 +348,7 @@ function Dashboard({ onLogout }) {
 
         {error && <div className="dashboard-alert error-alert" role="alert">{error}</div>}
         {notice && <div className="dashboard-alert success-alert" role="status">{notice}</div>}
+        {paymentMessage && <div className="dashboard-alert info-alert" role="status">{paymentMessage}</div>}
 
         {!account ? (
           <section className="empty-account-card">

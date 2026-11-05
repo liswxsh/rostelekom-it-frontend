@@ -152,6 +152,11 @@
   background: #e5f7ec;
 }
 
+.info-alert {
+  color: #6941c6;
+  background: #f1eaff;
+}
+
 .dashboard-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(330px, 0.85fr);

@@ -299,6 +299,7 @@ function App() {
   const logout = useCallback(() => {
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
+    localStorage.removeItem('pendingPaymentId');
     setIsAuthenticated(false);
     setStep('phone');
     setPhone('');
