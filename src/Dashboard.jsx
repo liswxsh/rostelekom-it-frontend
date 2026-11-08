@@ -15,6 +15,114 @@ const TRANSACTION_TYPES = {
   REFUND: { label: 'Возврат', sign: '+', className: 'income' },
 };
 
+const TARIFFS = [
+  {
+    name: 'Поминутный',
+    description: 'Без абонентской платы: платите только за использованную связь.',
+    speed: '2,5 ₽ / минута',
+    price: '2,5 ₽',
+    period: 'за минуту',
+    accent: 'purple',
+    features: ['SMS — 2,5 ₽', '1 ГБ — 15 ₽ в день'],
+  },
+  {
+    name: 'Посуточный',
+    description: 'Пакет начисляется только в те дни, когда вы пользуетесь связью.',
+    speed: '1 ГБ + 30 минут',
+    price: '25 ₽',
+    period: 'в сутки',
+    accent: 'orange',
+    features: ['10 SMS', 'Безлимит внутри сети'],
+  },
+  {
+    name: 'Старт',
+    description: 'Всё необходимое для общения и повседневных задач.',
+    speed: '5 ГБ + 100 минут',
+    price: '350 ₽',
+    period: 'в месяц',
+    accent: 'blue',
+    features: ['50 SMS', 'Безлимит внутри сети', 'Безлимит на мессенджеры'],
+  },
+  {
+    name: 'Детский',
+    description: 'Связь для ребёнка с дополнительной заботой родителей.',
+    speed: '20 ГБ + 300 минут',
+    price: '450 ₽',
+    period: 'в месяц',
+    accent: 'purple',
+    action: '−20% при подключении к семейной группе',
+    features: ['100 SMS', 'Родительский контроль', 'Геолокация ребёнка'],
+  },
+  {
+    name: 'Базовый',
+    description: 'Сбалансированный тариф для общения и интернета.',
+    speed: '10 ГБ + 200 минут',
+    price: '550 ₽',
+    period: 'в месяц',
+    accent: 'blue',
+    features: ['200 SMS', 'Безлимит внутри сети', 'Защита от спама'],
+  },
+  {
+    name: 'Онлайн',
+    description: 'Больше интернета для видео, соцсетей и мессенджеров.',
+    speed: '30 ГБ + 500 минут',
+    price: '650 ₽',
+    period: 'в месяц',
+    accent: 'orange',
+    action: 'Цена заморожена на год',
+    features: ['100 SMS', 'Безлимит на мессенджеры, соцсети и видео'],
+  },
+  {
+    name: 'Оптимальный',
+    description: 'Большой пакет минут и интернета для активного общения.',
+    speed: '50 ГБ + 800 минут',
+    price: '800 ₽',
+    oldPrice: '940 ₽',
+    period: 'в месяц',
+    accent: 'purple',
+    popular: true,
+    action: '−15% первые 3 месяца',
+    features: ['300 SMS', 'Онлайн-кинотеатр', 'Перенос остатков ГБ и минут'],
+  },
+  {
+    name: 'Безлимитный',
+    description: 'Безлимитный интернет для тех, кто всегда онлайн.',
+    speed: 'Безлимит ГБ + 1500 минут',
+    price: '950 ₽',
+    period: '30 дней',
+    accent: 'orange',
+    action: '−5% при автоплатеже',
+    features: ['500 SMS', 'Раздача интернета — 30 ГБ', '5G без доплаты'],
+  },
+  {
+    name: 'Для устройств',
+    description: 'Отдельный тариф для модемов, роутеров и планшетов.',
+    speed: '60 ГБ',
+    price: '700 ₽',
+    period: 'в месяц',
+    accent: 'blue',
+    features: ['Раздача без ограничений', 'Подходит для роутеров'],
+  },
+  {
+    name: 'Семейный',
+    description: 'Общий пакет связи для всей семьи на одном тарифе.',
+    speed: 'Безлимит ГБ + 2500 минут',
+    price: '1 250 ₽',
+    period: '30 дней',
+    accent: 'purple',
+    features: ['1000 SMS', '+2 номера в группе бесплатно', 'Родительский контроль'],
+  },
+  {
+    name: 'Премиум',
+    description: 'Максимальные возможности и приоритетная поддержка.',
+    speed: 'Безлимит ГБ и минут',
+    price: '2 000 ₽',
+    period: 'в месяц',
+    accent: 'orange',
+    features: ['Безлимит SMS', '5 ГБ в роуминге', 'Онлайн-кинотеатр и музыка', '+3 номера бесплатно'],
+  },
+];
+
 const PENDING_PAYMENT_KEY = 'pendingPaymentId';
 const PAYMENT_POLL_INTERVAL = 3000;
 const PAYMENT_POLL_ATTEMPTS = 20;
@@ -53,6 +161,7 @@ function getGreeting() {
 
 function Dashboard({ onLogout }) {
   const [currentPage, setCurrentPage] = useState('home');
+  const [tariffIndex, setTariffIndex] = useState(0);
   const [profile, setProfile] = useState(null);
   const [account, setAccount] = useState(undefined);
   const [transactions, setTransactions] = useState([]);
@@ -452,10 +561,62 @@ function Dashboard({ onLogout }) {
 
       <main className="dashboard-main tariffs-page" hidden={currentPage !== 'tariffs'}>
         <p className="eyebrow">Услуги</p>
-        <h1>Тарифы</h1>
-        <section className="tariffs-empty">
-          <h2>Тарифов пока нет</h2>
-          <p>Доступные предложения появятся здесь позже.</p>
+        <div className="tariffs-heading">
+          <div>
+            <h1>Тарифы</h1>
+            <p>Выберите подходящий вариант для дома и связи.</p>
+          </div>
+          <span className="tariffs-counter">
+            {tariffIndex + 1}–{Math.min(tariffIndex + 4, TARIFFS.length)} / {TARIFFS.length}
+          </span>
+        </div>
+        <section className="tariffs-carousel" aria-label="Доступные тарифы">
+          <button
+            className="tariffs-arrow"
+            type="button"
+            aria-label="Предыдущий тариф"
+            onClick={() => setTariffIndex((current) => (
+              current === 0 ? TARIFFS.length - 4 : current - 1
+            ))}
+          >
+            ‹
+          </button>
+          <div className="tariffs-viewport">
+            <div
+              className="tariffs-track"
+              style={{ '--tariff-index': tariffIndex }}
+            >
+              {TARIFFS.map((tariff) => (
+                <article className={`tariff-card tariff-${tariff.accent}`} key={tariff.name}>
+                  {tariff.popular && <span className="tariff-badge">Популярный</span>}
+                  <p className="card-label">Тариф</p>
+                  <h2>{tariff.name}</h2>
+                  <p className="tariff-description">{tariff.description}</p>
+                  <strong className="tariff-speed">{tariff.speed}</strong>
+                  <ul className="tariff-features">
+                    {tariff.features.map((feature) => <li key={feature}>{feature}</li>)}
+                  </ul>
+                  <div className="tariff-price">
+                    <strong>{tariff.price}</strong>
+                    {tariff.oldPrice && <del>{tariff.oldPrice}</del>}
+                    <span>{tariff.period}</span>
+                  </div>
+                  {tariff.action && <p className="tariff-action">{tariff.action}</p>}
+                  <button className="tariff-button" type="button">Подробнее</button>
+                </article>
+              ))}
+            </div>
+          </div>
+          <button
+            className="tariffs-arrow"
+            type="button"
+            aria-label="Следующий тариф"
+            onClick={() => setTariffIndex((current) => (
+              current === TARIFFS.length - 4 ? 0 : current + 1
+            ))}
+          >
+            ›
+          </button>
         </section>
       </main>
     </div>
