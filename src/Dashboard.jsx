@@ -398,11 +398,14 @@ function Dashboard({ onLogout }) {
   }
 
   const displayName = profile?.firstName || profile?.username || '';
+  const fullName = [profile?.lastName, profile?.firstName, profile?.middleName]
+    .filter(Boolean)
+    .join(' ') || 'Имя пользователя';
 
   return (
     <div className="dashboard-page">
       <Helmet>
-        <title>Главная</title>
+        <title>{currentPage === 'profile' ? 'Профиль' : currentPage === 'tariffs' ? 'Тарифы' : 'Главная'}</title>
       </Helmet>
 
       <header className="dashboard-header">
@@ -425,12 +428,18 @@ function Dashboard({ onLogout }) {
             </button>
           </nav>
           <div className="header-user">
-            <div className="profile-avatar" aria-label="Профиль" title={formatProfilePhone(profile?.phone)}>
+            <button
+              className="profile-avatar"
+              type="button"
+              aria-label="Открыть профиль"
+              title={formatProfilePhone(profile?.phone)}
+              onClick={() => setCurrentPage('profile')}
+            >
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <circle cx="12" cy="8" r="4" />
                 <path d="M4.5 20C5.2 15.9 7.7 14 12 14C16.3 14 18.8 15.9 19.5 20" />
               </svg>
-            </div>
+            </button>
             <button className="logout-button" type="button" onClick={logout}>Выйти</button>
           </div>
         </div>
@@ -618,6 +627,55 @@ function Dashboard({ onLogout }) {
             ›
           </button>
         </section>
+      </main>
+
+      <main className="dashboard-main profile-page" hidden={currentPage !== 'profile'}>
+        <div className="profile-heading">
+          <div>
+            <p className="eyebrow">Профиль</p>
+            <h1>Личные данные</h1>
+            <p>Здесь можно посмотреть данные вашего аккаунта.</p>
+          </div>
+        </div>
+
+        <section className="profile-summary">
+          <div className="profile-large-avatar" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <circle cx="12" cy="8" r="4" />
+              <path d="M4.5 20C5.2 15.9 7.7 14 12 14C16.3 14 18.8 15.9 19.5 20" />
+            </svg>
+          </div>
+          <div>
+            <p className="profile-summary-label">Пользователь</p>
+            <h2>{fullName}</h2>
+            <p>{formatProfilePhone(profile?.phone) || 'Номер телефона не указан'}</p>
+          </div>
+        </section>
+
+        <div className="profile-grid">
+          <section className="profile-card">
+            <p className="card-label">Тариф</p>
+            <div className="profile-tariff-heading">
+              <h2>Текущий тариф</h2>
+              <span className="profile-tariff-status">Не подключён</span>
+            </div>
+            <div className="profile-tariff-placeholder">
+              <span className="profile-tariff-icon">⌁</span>
+              <div>
+                <strong>Здесь появится ваш тариф</strong>
+                <p>Название, стоимость и дата следующего списания будут отображаться после подключения.</p>
+              </div>
+            </div>
+          </section>
+
+          <section className="profile-card profile-account-card">
+            <p className="card-label">Лицевой счёт</p>
+            <h2>{account ? 'Номер лицевого счёта' : 'Счёт не открыт'}</h2>
+            {account ? (
+              <strong className="profile-account-number">{account.number}</strong>
+            ) : <p className="profile-muted">Откройте лицевой счёт на главной странице, чтобы пополнять баланс и пользоваться услугами.</p>}
+          </section>
+        </div>
       </main>
     </div>
   );
