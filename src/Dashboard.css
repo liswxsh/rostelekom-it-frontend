@@ -493,6 +493,32 @@
   font-weight: 700;
 }
 
+.tariffs-loading {
+  min-height: 330px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 22px;
+  color: var(--color-text-grey);
+  background: var(--color-white);
+  box-shadow: 0 8px 24px rgb(16 24 40 / 7%);
+}
+
+.tariffs-empty-state {
+  display: flex;
+  min-height: 280px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  border-radius: 22px;
+  background: var(--color-white);
+  box-shadow: 0 8px 24px rgb(16 24 40 / 7%);
+  text-align: center;
+}
+
+.tariffs-empty-state h2 { margin: 0; font-size: 24px; }
+.tariffs-empty-state p { margin: 10px 0 0; color: var(--color-text-grey); }
+
 .tariffs-carousel {
   display: flex;
   align-items: center;
@@ -662,6 +688,27 @@
   font: inherit;
   font-weight: 700;
   cursor: pointer;
+}
+
+.tariff-button:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+
+.tariff-card-actions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: auto;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.tariff-card-actions .tariff-button {
+  margin-top: 0;
 }
 
 .profile-heading {

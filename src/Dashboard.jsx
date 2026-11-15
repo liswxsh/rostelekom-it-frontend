@@ -123,6 +123,57 @@ const TARIFFS = [
   },
 ];
 
+function extractPagedItems(data) {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.content)) return data.content;
+
+  const embedded = data?._embedded;
+  if (embedded && typeof embedded === 'object') {
+    return Object.values(embedded).find(Array.isArray) || [];
+  }
+
+  return [];
+}
+
+function mergeTariffData(apiTariff) {
+  const localTariff = TARIFFS.find((tariff) => tariff.name === apiTariff.name) || {};
+  return {
+    ...localTariff,
+    ...apiTariff,
+    accent: localTariff.accent || 'purple',
+    features: localTariff.features || [],
+    description: apiTariff.description || localTariff.description || 'Тариф для связи и интернета.',
+    period: apiTariff.billingPeriod === 'MONTH' ? 'в месяц' : localTariff.period,
+    priceLabel: formatMoney(apiTariff.price, apiTariff.currency),
+  };
+}
+
+const TARIFF_CATEGORY_LABELS = {
+  INTERNET: 'Интернет',
+  TV: 'Телевидение',
+  MOBILE: 'Мобильная связь',
+};
+
+const TARIFF_CATEGORY_ACCENTS = {
+  INTERNET: 'blue',
+  TV: 'orange',
+  MOBILE: 'purple',
+};
+
+const TARIFF_ACCENTS = {
+  Старт: 'blue',
+  Детский: 'purple',
+  Базовый: 'blue',
+  Онлайн: 'orange',
+  Оптимальный: 'purple',
+  'Для устройств': 'blue',
+  Премиум: 'orange',
+};
+
+const BILLING_PERIOD_LABELS = {
+  MONTH: 'в месяц',
+};
+
 const PENDING_PAYMENT_KEY = 'pendingPaymentId';
 const PAYMENT_POLL_INTERVAL = 3000;
 const PAYMENT_POLL_ATTEMPTS = 20;
@@ -162,6 +213,13 @@ function getGreeting() {
 function Dashboard({ onLogout }) {
   const [currentPage, setCurrentPage] = useState('home');
   const [tariffIndex, setTariffIndex] = useState(0);
+  const [tariffs, setTariffs] = useState([]);
+  const [subscriptions, setSubscriptions] = useState([]);
+  const [tariffsMessage, setTariffsMessage] = useState('');
+  const [isTariffsLoading, setIsTariffsLoading] = useState(true);
+  const [isSubscriptionsLoading, setIsSubscriptionsLoading] = useState(true);
+  const [subscriptionsError, setSubscriptionsError] = useState('');
+  const [submittingTariffId, setSubmittingTariffId] = useState('');
   const [profile, setProfile] = useState(null);
   const [account, setAccount] = useState(undefined);
   const [transactions, setTransactions] = useState([]);
@@ -174,17 +232,136 @@ function Dashboard({ onLogout }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const showPage = (page) => {
+    setError('');
+    setCurrentPage(page);
+    loadData(false);
+    if (page === 'tariffs' || page === 'profile') loadSubscriptions();
+  };
+
   const handleError = useCallback((requestError) => {
-    if (requestError instanceof ApiError && requestError.status === 401) {
+    if (requestError instanceof ApiError && requestError.status === 401
+      && !localStorage.getItem('refreshToken')) {
       onLogout();
       return;
     }
     setError(requestError.message || 'Не удалось загрузить данные');
   }, [onLogout]);
 
+  const loadTariffs = useCallback(async () => {
+    setIsTariffsLoading(true);
+    setTariffsMessage('');
+
+    try {
+      const response = await getJson('/api/services/tariffs?size=20&sort=createdAt,asc');
+      const apiTariffs = extractPagedItems(response);
+      setTariffs(apiTariffs.map(mergeTariffData));
+      if (apiTariffs.length === 0) setTariffsMessage('Активных тарифов пока нет.');
+    } catch {
+      setTariffs([]);
+      setTariffsMessage('Не удалось загрузить тарифы. Попробуйте обновить страницу.');
+    } finally {
+      setIsTariffsLoading(false);
+    }
+  }, []);
+
+  const loadSubscriptions = useCallback(async () => {
+    try {
+      const response = await getJson('/api/services/subscriptions/my?size=20', { auth: true });
+      const items = extractPagedItems(response);
+      setSubscriptions(items);
+      setSubscriptionsError('');
+      return items;
+    } catch (requestError) {
+      if (requestError instanceof ApiError && requestError.status === 401) handleError(requestError);
+      else setSubscriptionsError('Не удалось проверить подключённые тарифы. Обновите страницу.');
+      return null;
+    } finally {
+      setIsSubscriptionsLoading(false);
+    }
+  }, [handleError]);
+
+  const subscribeToTariff = async (tariff) => {
+    if (!tariff.id || submittingTariffId || isSubscriptionsLoading || subscriptionsError) return;
+    if (subscriptions.some((item) => item.tariffId === tariff.id && item.status !== 'CANCELED')) return;
+
+    setSubmittingTariffId(tariff.id);
+    setError('');
+    setNotice('');
+
+    try {
+      const freshAccount = await getJson('/api/billing/accounts/me', { auth: true });
+      setAccount(freshAccount);
+      if (freshAccount.status !== 'ACTIVE') {
+        setError('Лицевой счёт недоступен для списания.');
+        return;
+      }
+      const missingAmount = Number(tariff.price) - Number(freshAccount.balance);
+      if (Number.isFinite(missingAmount) && missingAmount > 0) {
+        setError(`Недостаточно средств. Пополните баланс на ${formatMoney(missingAmount, freshAccount.currency)}.`);
+        return;
+      }
+
+      const subscription = await postJson(
+        '/api/services/subscriptions',
+        { tariffId: tariff.id },
+        { auth: true },
+      );
+      setSubscriptions((current) => [subscription, ...current]);
+      await loadData(false);
+      await loadSubscriptions();
+      if (subscription.status === 'ACTIVE' && subscription.lastChargeTransactionId) {
+        setNotice(`Тариф «${tariff.name}» подключён. Оплата списана с баланса.`);
+      } else {
+        setError('Тариф ожидает оплаты. Проверьте состояние подписки в профиле.');
+      }
+    } catch (requestError) {
+      if (requestError instanceof ApiError && requestError.status === 401) {
+        handleError(requestError);
+      } else {
+        const current = await loadSubscriptions();
+        await loadData(false);
+        const existing = current?.find((item) => item.tariffId === tariff.id && item.status !== 'CANCELED');
+        if (existing?.status === 'ACTIVE' && existing.lastChargeTransactionId) {
+          setNotice(`Тариф «${tariff.name}» подключён. Оплата списана с баланса.`);
+        } else if (existing?.status === 'SUSPENDED') {
+          setError(`Тариф «${tariff.name}» ожидает оплаты. Повторное подключение не требуется: сервис попробует списать оплату автоматически.`);
+        } else {
+          setError(requestError.message?.replace(tariff.id, tariff.name) || 'Не удалось подключить тариф.');
+        }
+      }
+    } finally {
+      setSubmittingTariffId('');
+    }
+  };
+
+  const cancelSuspendedTariff = async (subscription) => {
+    if (submittingTariffId) return;
+    setSubmittingTariffId(subscription.tariffId);
+    setError('');
+    setNotice('');
+    try {
+      await postJson(`/api/services/subscriptions/${subscription.id}/cancel?immediate=true`, undefined, { auth: true });
+      await loadSubscriptions();
+      setNotice(`Ожидание оплаты тарифа «${subscription.tariffName}» отменено.`);
+    } catch (requestError) {
+      handleError(requestError);
+    } finally {
+      setSubmittingTariffId('');
+    }
+  };
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      loadTariffs();
+      loadSubscriptions();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadSubscriptions, loadTariffs]);
+
   const loadData = useCallback(async (showLoader = true) => {
     if (showLoader) setIsLoading(true);
-    setError('');
+    if (showLoader) setError('');
 
     try {
       const [user, userAccount] = await Promise.all([
@@ -401,6 +578,11 @@ function Dashboard({ onLogout }) {
   const fullName = [profile?.lastName, profile?.firstName, profile?.middleName]
     .filter(Boolean)
     .join(' ') || 'Имя пользователя';
+  const activeSubscription = subscriptions.find((subscription) => (
+    subscription.status === 'ACTIVE'
+  ));
+  const suspendedSubscriptions = subscriptions.filter((subscription) => subscription.status === 'SUSPENDED');
+  const lastTariffIndex = Math.max(0, tariffs.length - 4);
 
   return (
     <div className="dashboard-page">
@@ -415,14 +597,14 @@ function Dashboard({ onLogout }) {
             <button
               className={currentPage === 'home' ? 'nav-active' : ''}
               type="button"
-              onClick={() => setCurrentPage('home')}
+              onClick={() => showPage('home')}
             >
               Главная
             </button>
             <button
               className={currentPage === 'tariffs' ? 'nav-active' : ''}
               type="button"
-              onClick={() => setCurrentPage('tariffs')}
+              onClick={() => showPage('tariffs')}
             >
               Тарифы
             </button>
@@ -433,7 +615,7 @@ function Dashboard({ onLogout }) {
               type="button"
               aria-label="Открыть профиль"
               title={formatProfilePhone(profile?.phone)}
-              onClick={() => setCurrentPage('profile')}
+              onClick={() => showPage('profile')}
             >
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <circle cx="12" cy="8" r="4" />
@@ -458,6 +640,7 @@ function Dashboard({ onLogout }) {
             onClick={() => {
               setNotice('');
               loadData().then(checkPendingPayment);
+              loadSubscriptions();
             }}
           >
             Обновить
@@ -576,17 +759,32 @@ function Dashboard({ onLogout }) {
             <p>Выберите подходящий вариант для дома и связи.</p>
           </div>
           <span className="tariffs-counter">
-            {tariffIndex + 1}–{Math.min(tariffIndex + 4, TARIFFS.length)} / {TARIFFS.length}
+            {tariffIndex + 1}–{Math.min(tariffIndex + 4, tariffs.length)} / {tariffs.length}
           </span>
         </div>
+        {error && <div className="dashboard-alert error-alert" role="alert">{error}</div>}
+        {notice && <div className="dashboard-alert success-alert" role="status">{notice}</div>}
+        {subscriptionsError && <div className="dashboard-alert error-alert" role="alert">{subscriptionsError}</div>}
+        {suspendedSubscriptions.length > 1 && (
+          <div className="dashboard-alert info-alert" role="status">
+            Ожидают оплаты: {suspendedSubscriptions.map((item) => item.tariffName).join(', ')}. Отмените ненужные тарифы: бэкенд может списать деньги за каждый из них.
+          </div>
+        )}
+        {tariffsMessage && <div className="dashboard-alert info-alert" role="status">{tariffsMessage}</div>}
+        {isTariffsLoading ? (
+          <div className="tariffs-loading">Загружаем тарифы…</div>
+        ) : tariffs.length === 0 ? (
+          <div className="tariffs-empty-state">
+            <h2>Тарифов пока нет</h2>
+            <p>Активные предложения появятся здесь после добавления в бэкенде.</p>
+          </div>
+        ) : (
         <section className="tariffs-carousel" aria-label="Доступные тарифы">
           <button
             className="tariffs-arrow"
             type="button"
             aria-label="Предыдущий тариф"
-            onClick={() => setTariffIndex((current) => (
-              current === 0 ? TARIFFS.length - 4 : current - 1
-            ))}
+            onClick={() => setTariffIndex((current) => (current === 0 ? lastTariffIndex : current - 1))}
           >
             ‹
           </button>
@@ -595,38 +793,54 @@ function Dashboard({ onLogout }) {
               className="tariffs-track"
               style={{ '--tariff-index': tariffIndex }}
             >
-              {TARIFFS.map((tariff) => (
-                <article className={`tariff-card tariff-${tariff.accent}`} key={tariff.name}>
-                  {tariff.popular && <span className="tariff-badge">Популярный</span>}
-                  <p className="card-label">Тариф</p>
+              {tariffs.map((tariff) => {
+                const connected = subscriptions.find((item) => item.tariffId === tariff.id && item.status === 'ACTIVE');
+                const suspended = suspendedSubscriptions.find((item) => item.tariffId === tariff.id);
+                return <article className={`tariff-card tariff-${TARIFF_ACCENTS[tariff.name] || TARIFF_CATEGORY_ACCENTS[tariff.category] || 'purple'}`} key={tariff.id || tariff.name}>
+                  <p className="card-label">{TARIFF_CATEGORY_LABELS[tariff.category] || 'Тариф'}</p>
                   <h2>{tariff.name}</h2>
-                  <p className="tariff-description">{tariff.description}</p>
-                  <strong className="tariff-speed">{tariff.speed}</strong>
-                  <ul className="tariff-features">
-                    {tariff.features.map((feature) => <li key={feature}>{feature}</li>)}
-                  </ul>
+                  <p className="tariff-description">{tariff.description || 'Описание тарифа пока не указано.'}</p>
+                  <strong className="tariff-speed">{tariff.speed || BILLING_PERIOD_LABELS[tariff.billingPeriod] || tariff.billingPeriod}</strong>
+                  {tariff.features?.length > 0 && (
+                    <ul className="tariff-features">
+                      {tariff.features.map((feature) => <li key={feature}>{feature}</li>)}
+                    </ul>
+                  )}
                   <div className="tariff-price">
-                    <strong>{tariff.price}</strong>
-                    {tariff.oldPrice && <del>{tariff.oldPrice}</del>}
-                    <span>{tariff.period}</span>
+                    <strong>{formatMoney(tariff.price, tariff.currency)}</strong>
+                    <span>{BILLING_PERIOD_LABELS[tariff.billingPeriod] || tariff.billingPeriod}</span>
                   </div>
-                  {tariff.action && <p className="tariff-action">{tariff.action}</p>}
-                  <button className="tariff-button" type="button">Подробнее</button>
+                  {suspended ? (
+                    <div className="tariff-card-actions">
+                      <span>Ожидает оплаты</span>
+                      <button className="tariff-button" type="button" disabled={Boolean(submittingTariffId)} onClick={() => cancelSuspendedTariff(suspended)}>
+                        {submittingTariffId === tariff.id ? 'Отменяем…' : 'Отменить ожидание'}
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      className="tariff-button"
+                      type="button"
+                      disabled={!tariff.id || Boolean(submittingTariffId) || isSubscriptionsLoading || Boolean(subscriptionsError) || Boolean(connected)}
+                      onClick={() => subscribeToTariff(tariff)}
+                    >
+                      {connected ? 'Подключён' : submittingTariffId === tariff.id ? 'Подключаем…' : 'Подключить'}
+                    </button>
+                  )}
                 </article>
-              ))}
+              })}
             </div>
           </div>
           <button
             className="tariffs-arrow"
             type="button"
             aria-label="Следующий тариф"
-            onClick={() => setTariffIndex((current) => (
-              current === TARIFFS.length - 4 ? 0 : current + 1
-            ))}
+            onClick={() => setTariffIndex((current) => (current === lastTariffIndex ? 0 : current + 1))}
           >
             ›
           </button>
         </section>
+        )}
       </main>
 
       <main className="dashboard-main profile-page" hidden={currentPage !== 'profile'}>
@@ -657,15 +871,39 @@ function Dashboard({ onLogout }) {
             <p className="card-label">Тариф</p>
             <div className="profile-tariff-heading">
               <h2>Текущий тариф</h2>
-              <span className="profile-tariff-status">Не подключён</span>
+              <span className="profile-tariff-status">
+                {subscriptionsError ? 'Недоступно' : isSubscriptionsLoading ? 'Загружаем' : activeSubscription ? 'Подключён' : suspendedSubscriptions.length ? 'Ожидает оплаты' : 'Не подключён'}
+              </span>
             </div>
-            <div className="profile-tariff-placeholder">
-              <span className="profile-tariff-icon">⌁</span>
-              <div>
-                <strong>Здесь появится ваш тариф</strong>
-                <p>Название, стоимость и дата следующего списания будут отображаться после подключения.</p>
+            {subscriptionsError ? (
+              <p className="profile-muted">{subscriptionsError}</p>
+            ) : isSubscriptionsLoading ? (
+              <p className="profile-muted">Проверяем подключённые тарифы…</p>
+            ) : activeSubscription ? (
+              <div className="profile-tariff-placeholder">
+                <span className="profile-tariff-icon">⌁</span>
+                <div>
+                  <strong>{activeSubscription.tariffName}</strong>
+                  <p>{formatMoney(activeSubscription.price, activeSubscription.currency)} в месяц · Следующее списание {formatDate(activeSubscription.nextChargeAt)}</p>
+                </div>
               </div>
-            </div>
+            ) : suspendedSubscriptions.length > 0 ? (
+              <div className="profile-tariff-placeholder">
+                <span className="profile-tariff-icon">!</span>
+                <div>
+                  <strong>Оплаченного тарифа пока нет</strong>
+                  <p>Ожидают оплаты: {suspendedSubscriptions.map((item) => item.tariffName).join(', ')}. Отмените ненужные тарифы на странице тарифов.</p>
+                </div>
+              </div>
+            ) : (
+              <div className="profile-tariff-placeholder">
+                <span className="profile-tariff-icon">⌁</span>
+                <div>
+                  <strong>Здесь появится ваш тариф</strong>
+                  <p>Название, стоимость и дата следующего списания будут отображаться после подключения.</p>
+                </div>
+              </div>
+            )}
           </section>
 
           <section className="profile-card profile-account-card">
