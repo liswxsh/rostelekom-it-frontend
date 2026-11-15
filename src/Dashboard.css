@@ -810,6 +810,16 @@
   white-space: nowrap;
 }
 
+.profile-tariff-status-active {
+  color: #027a48;
+  background: #dff5e9;
+}
+
+.profile-tariff-status-suspended {
+  color: #b42318;
+  background: #fee4e2;
+}
+
 .profile-tariff-placeholder {
   display: flex;
   align-items: flex-start;

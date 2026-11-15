@@ -582,6 +582,15 @@ function Dashboard({ onLogout }) {
     subscription.status === 'ACTIVE'
   ));
   const suspendedSubscriptions = subscriptions.filter((subscription) => subscription.status === 'SUSPENDED');
+  const tariffStatus = subscriptionsError
+    ? { label: 'Недоступно', color: 'neutral' }
+    : isSubscriptionsLoading
+      ? { label: 'Загружаем', color: 'neutral' }
+      : activeSubscription
+        ? { label: 'Подключён', color: 'active' }
+        : suspendedSubscriptions.length
+          ? { label: 'Приостановлен', color: 'suspended' }
+          : { label: 'Не подключён', color: 'neutral' };
   const lastTariffIndex = Math.max(0, tariffs.length - 4);
 
   return (
@@ -871,8 +880,8 @@ function Dashboard({ onLogout }) {
             <p className="card-label">Тариф</p>
             <div className="profile-tariff-heading">
               <h2>Текущий тариф</h2>
-              <span className="profile-tariff-status">
-                {subscriptionsError ? 'Недоступно' : isSubscriptionsLoading ? 'Загружаем' : activeSubscription ? 'Подключён' : suspendedSubscriptions.length ? 'Ожидает оплаты' : 'Не подключён'}
+              <span className={`profile-tariff-status profile-tariff-status-${tariffStatus.color}`}>
+                {tariffStatus.label}
               </span>
             </div>
             {subscriptionsError ? (
