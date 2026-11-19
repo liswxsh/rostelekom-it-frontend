@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { ApiError, getJson, postJson } from './api.js';
+import TariffsPage from './TariffsPage.jsx';
+import ProfilePage from './ProfilePage.jsx';
+import { mergeTariffData } from './tariffData.js';
+import { formatMoney, formatDate, formatProfilePhone } from './formatters.js';
 import './Dashboard.css';
 
 const ACCOUNT_STATUSES = {
@@ -15,114 +19,6 @@ const TRANSACTION_TYPES = {
   REFUND: { label: 'Возврат', sign: '+', className: 'income' },
 };
 
-const TARIFFS = [
-  {
-    name: 'Поминутный',
-    description: 'Без абонентской платы: платите только за использованную связь.',
-    speed: '2,5 ₽ / минута',
-    price: '2,5 ₽',
-    period: 'за минуту',
-    accent: 'purple',
-    features: ['SMS — 2,5 ₽', '1 ГБ — 15 ₽ в день'],
-  },
-  {
-    name: 'Посуточный',
-    description: 'Пакет начисляется только в те дни, когда вы пользуетесь связью.',
-    speed: '1 ГБ + 30 минут',
-    price: '25 ₽',
-    period: 'в сутки',
-    accent: 'orange',
-    features: ['10 SMS', 'Безлимит внутри сети'],
-  },
-  {
-    name: 'Старт',
-    description: 'Всё необходимое для общения и повседневных задач.',
-    speed: '5 ГБ + 100 минут',
-    price: '350 ₽',
-    period: 'в месяц',
-    accent: 'blue',
-    features: ['50 SMS', 'Безлимит внутри сети', 'Безлимит на мессенджеры'],
-  },
-  {
-    name: 'Детский',
-    description: 'Связь для ребёнка с дополнительной заботой родителей.',
-    speed: '20 ГБ + 300 минут',
-    price: '450 ₽',
-    period: 'в месяц',
-    accent: 'purple',
-    action: '−20% при подключении к семейной группе',
-    features: ['100 SMS', 'Родительский контроль', 'Геолокация ребёнка'],
-  },
-  {
-    name: 'Базовый',
-    description: 'Сбалансированный тариф для общения и интернета.',
-    speed: '10 ГБ + 200 минут',
-    price: '550 ₽',
-    period: 'в месяц',
-    accent: 'blue',
-    features: ['200 SMS', 'Безлимит внутри сети', 'Защита от спама'],
-  },
-  {
-    name: 'Онлайн',
-    description: 'Больше интернета для видео, соцсетей и мессенджеров.',
-    speed: '30 ГБ + 500 минут',
-    price: '650 ₽',
-    period: 'в месяц',
-    accent: 'orange',
-    action: 'Цена заморожена на год',
-    features: ['100 SMS', 'Безлимит на мессенджеры, соцсети и видео'],
-  },
-  {
-    name: 'Оптимальный',
-    description: 'Большой пакет минут и интернета для активного общения.',
-    speed: '50 ГБ + 800 минут',
-    price: '800 ₽',
-    oldPrice: '940 ₽',
-    period: 'в месяц',
-    accent: 'purple',
-    popular: true,
-    action: '−15% первые 3 месяца',
-    features: ['300 SMS', 'Онлайн-кинотеатр', 'Перенос остатков ГБ и минут'],
-  },
-  {
-    name: 'Безлимитный',
-    description: 'Безлимитный интернет для тех, кто всегда онлайн.',
-    speed: 'Безлимит ГБ + 1500 минут',
-    price: '950 ₽',
-    period: '30 дней',
-    accent: 'orange',
-    action: '−5% при автоплатеже',
-    features: ['500 SMS', 'Раздача интернета — 30 ГБ', '5G без доплаты'],
-  },
-  {
-    name: 'Для устройств',
-    description: 'Отдельный тариф для модемов, роутеров и планшетов.',
-    speed: '60 ГБ',
-    price: '700 ₽',
-    period: 'в месяц',
-    accent: 'blue',
-    features: ['Раздача без ограничений', 'Подходит для роутеров'],
-  },
-  {
-    name: 'Семейный',
-    description: 'Общий пакет связи для всей семьи на одном тарифе.',
-    speed: 'Безлимит ГБ + 2500 минут',
-    price: '1 250 ₽',
-    period: '30 дней',
-    accent: 'purple',
-    features: ['1000 SMS', '+2 номера в группе бесплатно', 'Родительский контроль'],
-  },
-  {
-    name: 'Премиум',
-    description: 'Максимальные возможности и приоритетная поддержка.',
-    speed: 'Безлимит ГБ и минут',
-    price: '2 000 ₽',
-    period: 'в месяц',
-    accent: 'orange',
-    features: ['Безлимит SMS', '5 ГБ в роуминге', 'Онлайн-кинотеатр и музыка', '+3 номера бесплатно'],
-  },
-];
-
 function extractPagedItems(data) {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.content)) return data.content;
@@ -134,73 +30,6 @@ function extractPagedItems(data) {
 
   return [];
 }
-
-function mergeTariffData(apiTariff) {
-  const localTariff = TARIFFS.find((tariff) => tariff.name === apiTariff.name) || {};
-  return {
-    ...localTariff,
-    ...apiTariff,
-    accent: localTariff.accent || 'purple',
-    features: localTariff.features || [],
-    description: apiTariff.description || localTariff.description || 'Тариф для связи и интернета.',
-    period: apiTariff.billingPeriod === 'MONTH' ? 'в месяц' : localTariff.period,
-    priceLabel: formatMoney(apiTariff.price, apiTariff.currency),
-  };
-}
-
-function getTariffOptions(tariff) {
-  const details = TARIFFS.find((item) => item.name === tariff?.name || item.name === tariff?.tariffName);
-  if (!details) return null;
-
-  const speed = details.speed;
-  const sms = details.features.find((feature) => /^(\d+|Безлимит) SMS$/i.test(feature));
-  return {
-    gigabytes: /Безлимит\s+ГБ/i.test(speed) ? Infinity : Number(speed.match(/(\d+)\s*ГБ/i)?.[1] ?? NaN),
-    minutes: /Безлимит\s+(?:ГБ\s+и\s+)?минут/i.test(speed) ? Infinity : Number(speed.match(/(\d+)\s*минут/i)?.[1] ?? NaN),
-    sms: sms?.startsWith('Безлимит') ? Infinity : Number(sms?.match(/\d+/)?.[0] ?? NaN),
-    features: details.features.filter((feature) => feature !== sms),
-  };
-}
-
-function allowanceText(value, unit) {
-  if (value === Infinity) return 'Безлимит';
-  if (!Number.isFinite(value)) return 'Не указано';
-  return `${value} ${unit}`;
-}
-
-function allowanceChange(previous, next) {
-  if (!Number.isFinite(previous) && previous !== Infinity) return 'neutral';
-  if (!Number.isFinite(next) && next !== Infinity) return 'neutral';
-  if (next > previous) return 'added';
-  if (next < previous) return 'removed';
-  return 'neutral';
-}
-
-const TARIFF_CATEGORY_LABELS = {
-  INTERNET: 'Интернет',
-  TV: 'Телевидение',
-  MOBILE: 'Мобильная связь',
-};
-
-const TARIFF_CATEGORY_ACCENTS = {
-  INTERNET: 'blue',
-  TV: 'orange',
-  MOBILE: 'purple',
-};
-
-const TARIFF_ACCENTS = {
-  Старт: 'blue',
-  Детский: 'purple',
-  Базовый: 'blue',
-  Онлайн: 'orange',
-  Оптимальный: 'purple',
-  'Для устройств': 'blue',
-  Премиум: 'orange',
-};
-
-const BILLING_PERIOD_LABELS = {
-  MONTH: 'в месяц',
-};
 
 const PENDING_PAYMENT_KEY = 'pendingPaymentId';
 const PENDING_TARIFF_SWITCH_KEY = 'pendingTariffSwitch';
@@ -216,29 +45,6 @@ function getPendingTariffSwitch() {
   }
 }
 
-function formatMoney(value, currency = 'RUB') {
-  return new Intl.NumberFormat('ru-RU', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 2,
-  }).format(Number(value || 0));
-}
-
-function formatDate(value) {
-  return new Intl.DateTimeFormat('ru-RU', {
-    day: 'numeric',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(value));
-}
-
-function formatProfilePhone(phone = '') {
-  const digits = phone.replace(/\D/g, '');
-  if (digits.length !== 11) return phone;
-  return `+7 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7, 9)}-${digits.slice(9)}`;
-}
-
 function getGreeting() {
   const hour = new Date().getHours();
   if (hour < 5) return 'Доброй ночи';
@@ -250,7 +56,6 @@ function getGreeting() {
 
 function Dashboard({ onLogout }) {
   const [currentPage, setCurrentPage] = useState('home');
-  const [tariffIndex, setTariffIndex] = useState(0);
   const [tariffs, setTariffs] = useState([]);
   const [subscriptions, setSubscriptions] = useState([]);
   const [tariffsMessage, setTariffsMessage] = useState('');
@@ -258,9 +63,7 @@ function Dashboard({ onLogout }) {
   const [isSubscriptionsLoading, setIsSubscriptionsLoading] = useState(true);
   const [subscriptionsError, setSubscriptionsError] = useState('');
   const [submittingTariffId, setSubmittingTariffId] = useState('');
-  const [switchTarget, setSwitchTarget] = useState(null);
   const [pendingCancellation, setPendingCancellation] = useState(null);
-  const switchDialogRef = useRef(null);
   const reconcilingSwitchRef = useRef(false);
   const [profile, setProfile] = useState(null);
   const [account, setAccount] = useState(undefined);
@@ -273,12 +76,6 @@ function Dashboard({ onLogout }) {
   const [paymentMessage, setPaymentMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (switchTarget && switchDialogRef.current && !switchDialogRef.current.open) {
-      switchDialogRef.current.showModal();
-    }
-  }, [switchTarget]);
 
   const showPage = (page) => {
     setError('');
@@ -742,28 +539,10 @@ function Dashboard({ onLogout }) {
   }
 
   const displayName = profile?.firstName || profile?.username || '';
-  const fullName = [profile?.lastName, profile?.firstName, profile?.middleName]
-    .filter(Boolean)
-    .join(' ') || 'Имя пользователя';
   const activeSubscriptions = subscriptions.filter((subscription) => subscription.status === 'ACTIVE')
     .sort((first, second) => new Date(second.createdAt) - new Date(first.createdAt));
   const activeSubscription = activeSubscriptions[0];
   const suspendedSubscriptions = subscriptions.filter((subscription) => subscription.status === 'SUSPENDED');
-  const currentOptions = getTariffOptions(activeSubscription);
-  const selectedOptions = getTariffOptions(switchTarget);
-  const currentFeatures = currentOptions?.features || [];
-  const selectedFeatures = selectedOptions?.features || [];
-  const comparedFeatures = [...new Set([...currentFeatures, ...selectedFeatures])];
-  const tariffStatus = subscriptionsError
-    ? { label: 'Недоступно', color: 'neutral' }
-    : isSubscriptionsLoading
-      ? { label: 'Загружаем', color: 'neutral' }
-      : activeSubscription
-        ? { label: 'Подключён', color: 'active' }
-        : suspendedSubscriptions.length
-          ? { label: 'Приостановлен', color: 'suspended' }
-          : { label: 'Не подключён', color: 'neutral' };
-  const lastTariffIndex = Math.max(0, tariffs.length - 4);
 
   return (
     <div className="dashboard-page">
@@ -932,216 +711,33 @@ function Dashboard({ onLogout }) {
         )}
       </main>
 
-      <main className="dashboard-main tariffs-page" hidden={currentPage !== 'tariffs'}>
-        <p className="eyebrow">Услуги</p>
-        <div className="tariffs-heading">
-          <div>
-            <h1>Тарифы</h1>
-            <p>Выберите подходящий вариант для дома и связи.</p>
-          </div>
-          <span className="tariffs-counter">
-            {tariffIndex + 1}–{Math.min(tariffIndex + 4, tariffs.length)} / {tariffs.length}
-          </span>
-        </div>
-        {error && <div className="dashboard-alert error-alert" role="alert">{error}</div>}
-        {notice && <div className="dashboard-alert success-alert" role="status">{notice}</div>}
-        {subscriptionsError && <div className="dashboard-alert error-alert" role="alert">{subscriptionsError}</div>}
-        {suspendedSubscriptions.length > 1 && (
-          <div className="dashboard-alert info-alert" role="status">
-            Ожидают оплаты: {suspendedSubscriptions.map((item) => item.tariffName).join(', ')}. Отмените ненужные тарифы: бэкенд может списать деньги за каждый из них.
-          </div>
-        )}
-        {tariffsMessage && <div className="dashboard-alert info-alert" role="status">{tariffsMessage}</div>}
-        {isTariffsLoading ? (
-          <div className="tariffs-loading">Загружаем тарифы…</div>
-        ) : tariffs.length === 0 ? (
-          <div className="tariffs-empty-state">
-            <h2>Тарифов пока нет</h2>
-            <p>Активные предложения появятся здесь после добавления в бэкенде.</p>
-          </div>
-        ) : (
-        <section className="tariffs-carousel" aria-label="Доступные тарифы">
-          <button
-            className="tariffs-arrow"
-            type="button"
-            aria-label="Предыдущий тариф"
-            onClick={() => setTariffIndex((current) => (current === 0 ? lastTariffIndex : current - 1))}
-          >
-            ‹
-          </button>
-          <div className="tariffs-viewport">
-            <div
-              className="tariffs-track"
-              style={{ '--tariff-index': tariffIndex }}
-            >
-              {tariffs.map((tariff) => {
-                const connected = subscriptions.find((item) => item.tariffId === tariff.id && item.status === 'ACTIVE');
-                const suspended = suspendedSubscriptions.find((item) => item.tariffId === tariff.id);
-                return <article className={`tariff-card tariff-${TARIFF_ACCENTS[tariff.name] || TARIFF_CATEGORY_ACCENTS[tariff.category] || 'purple'}`} key={tariff.id || tariff.name}>
-                  <p className="card-label">{TARIFF_CATEGORY_LABELS[tariff.category] || 'Тариф'}</p>
-                  <h2>{tariff.name}</h2>
-                  <p className="tariff-description">{tariff.description || 'Описание тарифа пока не указано.'}</p>
-                  <strong className="tariff-speed">{tariff.speed || BILLING_PERIOD_LABELS[tariff.billingPeriod] || tariff.billingPeriod}</strong>
-                  {tariff.features?.length > 0 && (
-                    <ul className="tariff-features">
-                      {tariff.features.map((feature) => <li key={feature}>{feature}</li>)}
-                    </ul>
-                  )}
-                  <div className="tariff-price">
-                    <strong>{formatMoney(tariff.price, tariff.currency)}</strong>
-                    <span>{BILLING_PERIOD_LABELS[tariff.billingPeriod] || tariff.billingPeriod}</span>
-                  </div>
-                  {suspended ? (
-                    <div className="tariff-card-actions">
-                      <span>Ожидает оплаты</span>
-                      <button className="tariff-button" type="button" disabled={Boolean(submittingTariffId)} onClick={() => cancelSuspendedTariff(suspended)}>
-                        {submittingTariffId === tariff.id ? 'Отменяем…' : 'Отменить ожидание'}
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      className="tariff-button"
-                      type="button"
-                      disabled={!tariff.id || Boolean(submittingTariffId) || isSubscriptionsLoading || Boolean(subscriptionsError) || Boolean(connected) || Boolean(pendingCancellation)}
-                      onClick={() => activeSubscription ? setSwitchTarget(tariff) : subscribeToTariff(tariff)}
-                    >
-                      {connected ? 'Подключён' : submittingTariffId === tariff.id ? 'Подключаем…' : 'Подключить'}
-                    </button>
-                  )}
-                </article>
-              })}
-            </div>
-          </div>
-          <button
-            className="tariffs-arrow"
-            type="button"
-            aria-label="Следующий тариф"
-            onClick={() => setTariffIndex((current) => (current === lastTariffIndex ? 0 : current + 1))}
-          >
-            ›
-          </button>
-        </section>
-        )}
-      </main>
+      <TariffsPage
+        hidden={currentPage !== 'tariffs'}
+        tariffs={tariffs}
+        subscriptions={subscriptions}
+        suspendedSubscriptions={suspendedSubscriptions}
+        activeSubscription={activeSubscription}
+        tariffsMessage={tariffsMessage}
+        isTariffsLoading={isTariffsLoading}
+        isSubscriptionsLoading={isSubscriptionsLoading}
+        subscriptionsError={subscriptionsError}
+        submittingTariffId={submittingTariffId}
+        pendingCancellation={pendingCancellation}
+        error={error}
+        notice={notice}
+        onSubscribe={subscribeToTariff}
+        onCancelSuspended={cancelSuspendedTariff}
+      />
 
-      <main className="dashboard-main profile-page" hidden={currentPage !== 'profile'}>
-        <div className="profile-heading">
-          <div>
-            <p className="eyebrow">Профиль</p>
-            <h1>Личные данные</h1>
-            <p>Здесь можно посмотреть данные вашего аккаунта.</p>
-          </div>
-        </div>
-
-        <section className="profile-summary">
-          <div className="profile-large-avatar" aria-hidden="true">
-            <svg viewBox="0 0 24 24">
-              <circle cx="12" cy="8" r="4" />
-              <path d="M4.5 20C5.2 15.9 7.7 14 12 14C16.3 14 18.8 15.9 19.5 20" />
-            </svg>
-          </div>
-          <div>
-            <p className="profile-summary-label">Пользователь</p>
-            <h2>{fullName}</h2>
-            <p>{formatProfilePhone(profile?.phone) || 'Номер телефона не указан'}</p>
-          </div>
-        </section>
-
-        <div className="profile-grid">
-          <section className="profile-card">
-            <p className="card-label">Тариф</p>
-            <div className="profile-tariff-heading">
-              <h2>Текущий тариф</h2>
-              <span className={`profile-tariff-status profile-tariff-status-${tariffStatus.color}`}>
-                {tariffStatus.label}
-              </span>
-            </div>
-            {subscriptionsError ? (
-              <p className="profile-muted">{subscriptionsError}</p>
-            ) : isSubscriptionsLoading ? (
-              <p className="profile-muted">Проверяем подключённые тарифы…</p>
-            ) : activeSubscription ? (
-              <div className="profile-tariff-placeholder">
-                <span className="profile-tariff-icon">⌁</span>
-                <div>
-                  <strong>{activeSubscription.tariffName}</strong>
-                  <p>{formatMoney(activeSubscription.price, activeSubscription.currency)} в месяц · Следующее списание {formatDate(activeSubscription.nextChargeAt)}</p>
-                </div>
-              </div>
-            ) : suspendedSubscriptions.length > 0 ? (
-              <div className="profile-tariff-placeholder">
-                <span className="profile-tariff-icon">!</span>
-                <div>
-                  <strong>Оплаченного тарифа пока нет</strong>
-                  <p>Ожидают оплаты: {suspendedSubscriptions.map((item) => item.tariffName).join(', ')}. Отмените ненужные тарифы на странице тарифов.</p>
-                </div>
-              </div>
-            ) : (
-              <div className="profile-tariff-placeholder">
-                <span className="profile-tariff-icon">⌁</span>
-                <div>
-                  <strong>Здесь появится ваш тариф</strong>
-                  <p>Название, стоимость и дата следующего списания будут отображаться после подключения.</p>
-                </div>
-              </div>
-            )}
-          </section>
-
-          <section className="profile-card profile-account-card">
-            <p className="card-label">Лицевой счёт</p>
-            <h2>{account ? 'Номер лицевого счёта' : 'Счёт не открыт'}</h2>
-            {account ? (
-              <strong className="profile-account-number">{account.number}</strong>
-            ) : <p className="profile-muted">Откройте лицевой счёт на главной странице, чтобы пополнять баланс и пользоваться услугами.</p>}
-          </section>
-        </div>
-      </main>
-
-      {switchTarget && activeSubscription && (
-        <dialog ref={switchDialogRef} className="tariff-switch-dialog" onClose={() => setSwitchTarget(null)} aria-labelledby="tariff-switch-title">
-          <button className="tariff-switch-close" type="button" aria-label="Закрыть" onClick={() => setSwitchTarget(null)}>×</button>
-          <p className="card-label">Смена тарифа</p>
-          <h2 id="tariff-switch-title">{activeSubscription.tariffName} → {switchTarget.name}</h2>
-          <div className="tariff-switch-comparison">
-            {[
-              ['Гигабайты', 'gigabytes', 'ГБ'],
-              ['Минуты', 'minutes', 'минут'],
-              ['СМС', 'sms', 'SMS'],
-            ].map(([label, field, unit]) => {
-              const previous = currentOptions?.[field];
-              const next = selectedOptions?.[field];
-              const change = allowanceChange(previous, next);
-              return (
-                <div className="tariff-switch-row" key={field}>
-                  <span>{label}</span>
-                  <strong className={`tariff-switch-${change}`}>
-                    {previous === next && (Number.isFinite(previous) || previous === Infinity)
-                      ? `Не меняется (${allowanceText(next, unit)})`
-                      : `${allowanceText(previous, unit)} → ${allowanceText(next, unit)}`}
-                  </strong>
-                </div>
-              );
-            })}
-          </div>
-          <h3>Дополнительные возможности</h3>
-          <ul className="tariff-switch-features">
-            {comparedFeatures.map((feature) => {
-              const change = !selectedFeatures.includes(feature) ? 'removed' : !currentFeatures.includes(feature) ? 'added' : 'neutral';
-              return <li className={`tariff-switch-${change}`} key={feature}>{change === 'added' ? '+ ' : change === 'removed' ? '− ' : '✓ '}{feature}</li>;
-            })}
-          </ul>
-          <p className="tariff-switch-payment">После подтверждения спишется {formatMoney(switchTarget.price, switchTarget.currency)}. Остаток прежнего периода не пересчитывается.</p>
-          <p className="tariff-switch-question">Точно хотите изменить тариф?</p>
-          <div className="tariff-switch-buttons">
-            <button type="button" onClick={() => setSwitchTarget(null)}>Нет, оставить</button>
-            <button type="button" onClick={() => {
-              const nextTariff = switchTarget;
-              setSwitchTarget(null);
-              subscribeToTariff(nextTariff, activeSubscription);
-            }}>Да, изменить</button>
-          </div>
-        </dialog>
-      )}
+      <ProfilePage
+        hidden={currentPage !== 'profile'}
+        profile={profile}
+        account={account}
+        activeSubscription={activeSubscription}
+        suspendedSubscriptions={suspendedSubscriptions}
+        isSubscriptionsLoading={isSubscriptionsLoading}
+        subscriptionsError={subscriptionsError}
+      />
     </div>
   );
 }
