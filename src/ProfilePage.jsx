@@ -2,7 +2,7 @@ import { formatMoney, formatDate, formatProfilePhone } from './formatters.js';
 import './ProfilePage.css';
 
 function ProfilePage({
-  hidden, profile, account, activeSubscription, suspendedSubscriptions,
+  hidden, onOpenSpeedTest, profile, account, activeSubscription, suspendedSubscriptions,
   isSubscriptionsLoading, subscriptionsError,
 }) {
   const fullName = [profile?.lastName, profile?.firstName, profile?.middleName]
@@ -110,6 +110,17 @@ function ProfilePage({
             <span aria-hidden="true">↗</span>
           </span>
         </a>
+        <button className="profile-card profile-coverage-card profile-speedtest-card" type="button" onClick={onOpenSpeedTest}>
+          <div className="profile-coverage-content">
+            <span className="profile-coverage-icon" aria-hidden="true">↗</span>
+            <div>
+              <p className="card-label">Интернет</p>
+              <h2>Тест скорости</h2>
+              <p>Узнайте скорость загрузки, отдачи и задержку вашего соединения.</p>
+            </div>
+          </div>
+          <span className="profile-coverage-link">Проверить скорость <span aria-hidden="true">→</span></span>
+        </button>
       </main>
 
   );

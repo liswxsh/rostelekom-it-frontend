@@ -1,0 +1,98 @@
+.speedtest-page { max-width: 1000px; }
+.speedtest-back {
+  margin-bottom: 24px;
+  padding: 0;
+  border: 0;
+  color: var(--color-purple);
+  background: transparent;
+  font-size: 15px;
+  font-weight: 700;
+}
+.speedtest-back:hover { text-decoration: underline; }
+.speedtest-heading h1 { margin: 0; font-size: clamp(30px, 4vw, 44px); }
+.speedtest-heading > p:last-child { margin: 10px 0 0; color: var(--color-text-grey); font-size: 17px; }
+.speedtest-server,
+.speedtest-panel {
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgb(16 24 40 / 7%);
+}
+.speedtest-server {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 30px;
+  padding: 22px 28px;
+}
+.speedtest-server-icon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  place-items: center;
+  border-radius: 14px;
+  color: var(--color-purple);
+  background: #f1e7ff;
+  font-size: 36px;
+  line-height: 1;
+}
+.speedtest-server div { min-width: 0; }
+.speedtest-server div span { display: block; margin-bottom: 4px; color: var(--color-text-grey); font-size: 13px; font-weight: 700; text-transform: uppercase; }
+.speedtest-server strong { font-size: 19px; overflow-wrap: anywhere; }
+.speedtest-panel { margin-top: 22px; padding: 32px; }
+.speedtest-gauge { position: relative; width: min(330px, 100%); margin: 0 auto 22px; }
+.speedtest-gauge svg { display: block; width: 100%; }
+.speedtest-gauge path { fill: none; stroke-linecap: round; stroke-width: 18; }
+.speedtest-gauge-track { stroke: #e4e4e7; }
+.speedtest-gauge-fill { stroke: var(--color-purple); transition: stroke-dasharray 250ms ease; }
+.speedtest-gauge-value {
+  position: absolute;
+  inset: 40% 0 0;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  text-align: center;
+}
+.speedtest-gauge-value strong { font-size: clamp(42px, 7vw, 64px); line-height: 1; }
+.speedtest-gauge-value span { margin-top: 5px; color: var(--color-text-grey); font-size: 18px; }
+.speedtest-gauge-value b { margin-top: 12px; color: var(--color-purple); font-size: 14px; text-transform: uppercase; }
+.speedtest-results { max-width: 680px; margin: 0 auto; }
+.speedtest-main-metrics,
+.speedtest-extra-metrics { display: grid; gap: 16px; }
+.speedtest-main-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.speedtest-extra-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 16px; }
+.speedtest-metric {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  flex-direction: column;
+  padding: 20px 12px;
+  border: 1px solid #edeef1;
+  border-radius: 16px;
+  background: #fafbfc;
+}
+.speedtest-metric span { color: var(--color-text-grey); font-size: 16px; font-weight: 700; }
+.speedtest-metric strong { margin: 8px 0 2px; font-size: 32px; }
+.speedtest-metric small { color: var(--color-text-grey); font-size: 14px; }
+.speedtest-error { max-width: 680px; margin: 20px auto 0; padding: 14px 18px; border-radius: 10px; color: #9f1d1d; background: #fde8e8; }
+.speedtest-start {
+  display: block;
+  width: min(680px, 100%);
+  margin: 24px auto 0;
+  padding: 16px 24px;
+  border: 0;
+  border-radius: 12px;
+  color: #fff;
+  background: var(--color-orange);
+  font-size: 18px;
+  font-weight: 700;
+}
+.speedtest-start:hover:not(:disabled) { background: #e94210; }
+.speedtest-start:disabled { opacity: .65; cursor: default; }
+.speedtest-note { max-width: 680px; margin: 16px auto 0; color: var(--color-text-grey); font-size: 13px; line-height: 1.5; text-align: center; }
+@media (max-width: 560px) {
+  .speedtest-panel { padding: 24px 16px; }
+  .speedtest-server { padding: 18px; }
+  .speedtest-server strong { font-size: 16px; }
+  .speedtest-metric strong { font-size: 26px; }
+}

@@ -130,6 +130,10 @@ rostelekom-it-frontend/
 └── vite.config.js            # настройка Vite и proxy для API
 ```
 
+## Тест скорости
+
+Страница открывается из верхнего меню или профиля. Измерения выполняет [LibreSpeed](https://github.com/librespeed/speedtest) через публичный сервер Sharktech в Амстердаме; наш бэкенд для этого не используется. Скрипты LibreSpeed и текст лицензии LGPL-3.0 находятся в `public/`. Для запуска теста нужен доступ к `amsspeed.sharktech.net`.
+
 ## Используемые технологии
 
 - React 19;

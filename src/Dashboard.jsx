@@ -3,6 +3,7 @@ import { Helmet } from 'react-helmet-async';
 import { ApiError, getJson, postJson } from './api.js';
 import TariffsPage from './TariffsPage.jsx';
 import ProfilePage from './ProfilePage.jsx';
+import SpeedTestPage from './SpeedTestPage.jsx';
 import { mergeTariffData } from './tariffData.js';
 import { formatMoney, formatDate, formatProfilePhone } from './formatters.js';
 import './Dashboard.css';
@@ -56,6 +57,7 @@ function getGreeting() {
 
 function Dashboard({ onLogout }) {
   const [currentPage, setCurrentPage] = useState('home');
+  const [speedTestReturnPage, setSpeedTestReturnPage] = useState('home');
   const [tariffs, setTariffs] = useState([]);
   const [subscriptions, setSubscriptions] = useState([]);
   const [tariffsMessage, setTariffsMessage] = useState('');
@@ -79,6 +81,7 @@ function Dashboard({ onLogout }) {
 
   const showPage = (page) => {
     setError('');
+    if (page === 'speedtest' && currentPage !== 'speedtest') setSpeedTestReturnPage(currentPage);
     setCurrentPage(page);
     loadData(false);
     if (page === 'tariffs' || page === 'profile') loadSubscriptions();
@@ -547,7 +550,7 @@ function Dashboard({ onLogout }) {
   return (
     <div className="dashboard-page">
       <Helmet>
-        <title>{currentPage === 'profile' ? 'Профиль' : currentPage === 'tariffs' ? 'Тарифы' : 'Главная'}</title>
+        <title>{currentPage === 'speedtest' ? 'Тест скорости' : currentPage === 'profile' ? 'Профиль' : currentPage === 'tariffs' ? 'Тарифы' : 'Главная'}</title>
       </Helmet>
 
       <header className="dashboard-header">
@@ -567,6 +570,13 @@ function Dashboard({ onLogout }) {
               onClick={() => showPage('tariffs')}
             >
               Тарифы
+            </button>
+            <button
+              className={currentPage === 'speedtest' ? 'nav-active' : ''}
+              type="button"
+              onClick={() => showPage('speedtest')}
+            >
+              Тест скорости
             </button>
           </nav>
           <div className="header-user">
@@ -731,6 +741,7 @@ function Dashboard({ onLogout }) {
 
       <ProfilePage
         hidden={currentPage !== 'profile'}
+        onOpenSpeedTest={() => showPage('speedtest')}
         profile={profile}
         account={account}
         activeSubscription={activeSubscription}
@@ -738,6 +749,12 @@ function Dashboard({ onLogout }) {
         isSubscriptionsLoading={isSubscriptionsLoading}
         subscriptionsError={subscriptionsError}
       />
+      {currentPage === 'speedtest' && (
+        <SpeedTestPage
+          onBack={() => showPage(speedTestReturnPage)}
+          backLabel={speedTestReturnPage === 'profile' ? '← Назад в профиль' : speedTestReturnPage === 'tariffs' ? '← Назад к тарифам' : '← На главную'}
+        />
+      )}
     </div>
   );
 }
