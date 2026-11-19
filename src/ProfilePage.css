@@ -197,8 +197,67 @@
 
 .profile-security p { margin: 6px 0 0; color: var(--color-text-grey); }
 
+.profile-coverage-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: 22px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.profile-coverage-card:hover .profile-coverage-link { background: #e94210; }
+.profile-coverage-card:focus-visible { outline: 3px solid #ffb596; outline-offset: 3px; }
+
+.profile-coverage-content {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.profile-coverage-content .card-label { margin-bottom: 8px; }
+.profile-coverage-content p:last-child { margin: 10px 0 0; color: var(--color-text-grey); }
+
+.profile-coverage-icon {
+  display: flex;
+  width: 54px;
+  height: 54px;
+  flex: 0 0 54px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  color: #ff4b16;
+  background: #fff0e9;
+}
+
+.profile-coverage-icon svg {
+  width: 28px;
+  height: 28px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.profile-coverage-link {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 18px;
+  border-radius: 10px;
+  color: #fff;
+  background: #ff4b16;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+
 @media (max-width: 800px) {
   .profile-grid { grid-template-columns: 1fr; }
+  .profile-coverage-card { align-items: flex-start; flex-direction: column; }
 }
 
 @media (max-width: 560px) {

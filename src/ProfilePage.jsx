@@ -90,6 +90,26 @@ function ProfilePage({
             ) : <p className="profile-muted">Откройте лицевой счёт на главной странице, чтобы пополнять баланс и пользоваться услугами.</p>}
           </section>
         </div>
+
+        <a className="profile-card profile-coverage-card" href="https://msk.rt.ru/map_mvno" target="_blank" rel="noopener noreferrer">
+          <div className="profile-coverage-content">
+            <span className="profile-coverage-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M12 21s7-6.1 7-12a7 7 0 1 0-14 0c0 5.9 7 12 7 12Z" />
+                <circle cx="12" cy="9" r="2.5" />
+              </svg>
+            </span>
+            <div>
+              <p className="card-label">Мобильная связь</p>
+              <h2>Карта покрытия</h2>
+              <p>Посмотрите, где доступен мобильный интернет Ростелекома.</p>
+            </div>
+          </div>
+          <span className="profile-coverage-link">
+            Открыть карту покрытия
+            <span aria-hidden="true">↗</span>
+          </span>
+        </a>
       </main>
 
   );
