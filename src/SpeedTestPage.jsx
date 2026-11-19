@@ -52,7 +52,7 @@ function Metric({ label, value, unit }) {
   );
 }
 
-function SpeedTestPage({ onBack, backLabel }) {
+function SpeedTestPage() {
   const testRef = useRef(null);
   const failedRef = useRef(false);
   const mountedRef = useRef(true);
@@ -140,7 +140,6 @@ function SpeedTestPage({ onBack, backLabel }) {
 
   return (
     <main className="dashboard-main speedtest-page">
-      <button className="speedtest-back" type="button" onClick={onBack}>{backLabel}</button>
       <div className="speedtest-heading">
         <p className="eyebrow">Проверка соединения</p>
         <h1>Тест скорости интернета</h1>

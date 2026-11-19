@@ -1,14 +1,4 @@
 .speedtest-page { max-width: 1000px; }
-.speedtest-back {
-  margin-bottom: 24px;
-  padding: 0;
-  border: 0;
-  color: var(--color-purple);
-  background: transparent;
-  font-size: 15px;
-  font-weight: 700;
-}
-.speedtest-back:hover { text-decoration: underline; }
 .speedtest-heading h1 { margin: 0; font-size: clamp(30px, 4vw, 44px); }
 .speedtest-heading > p:last-child { margin: 10px 0 0; color: var(--color-text-grey); font-size: 17px; }
 .speedtest-server,

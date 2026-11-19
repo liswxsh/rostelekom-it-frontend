@@ -57,7 +57,6 @@ function getGreeting() {
 
 function Dashboard({ onLogout }) {
   const [currentPage, setCurrentPage] = useState('home');
-  const [speedTestReturnPage, setSpeedTestReturnPage] = useState('home');
   const [tariffs, setTariffs] = useState([]);
   const [subscriptions, setSubscriptions] = useState([]);
   const [tariffsMessage, setTariffsMessage] = useState('');
@@ -81,7 +80,6 @@ function Dashboard({ onLogout }) {
 
   const showPage = (page) => {
     setError('');
-    if (page === 'speedtest' && currentPage !== 'speedtest') setSpeedTestReturnPage(currentPage);
     setCurrentPage(page);
     loadData(false);
     if (page === 'tariffs' || page === 'profile') loadSubscriptions();
@@ -748,12 +746,7 @@ function Dashboard({ onLogout }) {
         isSubscriptionsLoading={isSubscriptionsLoading}
         subscriptionsError={subscriptionsError}
       />
-      {currentPage === 'speedtest' && (
-        <SpeedTestPage
-          onBack={() => showPage(speedTestReturnPage)}
-          backLabel={speedTestReturnPage === 'profile' ? '← Назад в профиль' : speedTestReturnPage === 'tariffs' ? '← Назад к тарифам' : '← На главную'}
-        />
-      )}
+      {currentPage === 'speedtest' && <SpeedTestPage />}
     </div>
   );
 }
