@@ -80,8 +80,23 @@
 .speedtest-start:hover:not(:disabled) { background: #e94210; }
 .speedtest-start:disabled { opacity: .65; cursor: default; }
 .speedtest-note { max-width: 680px; margin: 16px auto 0; color: var(--color-text-grey); font-size: 13px; line-height: 1.5; text-align: center; }
+.speedtest-history { margin-top: 22px; padding: 28px 32px; border-radius: 20px; background: #fff; box-shadow: 0 8px 24px rgb(16 24 40 / 7%); }
+.speedtest-history-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.speedtest-history-heading h2 { margin: 4px 0 0; font-size: 26px; }
+.speedtest-history-heading button { padding: 10px 14px; border: 1px solid #d8dce5; border-radius: 10px; color: var(--color-text-grey); background: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.speedtest-history-heading button:hover { color: var(--color-purple); border-color: var(--color-purple); }
+.speedtest-history-empty { margin: 22px 0 0; color: var(--color-text-grey); }
+.speedtest-history-list { display: grid; gap: 12px; margin: 22px 0 0; padding: 0; list-style: none; }
+.speedtest-history-item { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px 24px; padding: 16px 18px; border: 1px solid #edeef1; border-radius: 12px; background: #fafbfc; }
+.speedtest-history-item time { font-weight: 700; }
+.speedtest-history-values { display: flex; flex-wrap: wrap; gap: 8px 18px; color: var(--color-text-grey); font-size: 14px; }
+.speedtest-history-values span { white-space: nowrap; }
+.speedtest-history-values strong { color: #111827; font-size: 16px; }
 @media (max-width: 560px) {
   .speedtest-panel { padding: 24px 16px; }
+  .speedtest-history { padding: 24px 16px; }
+  .speedtest-history-heading { align-items: flex-start; flex-direction: column; }
+  .speedtest-history-heading h2 { font-size: 23px; }
   .speedtest-server { padding: 18px; }
   .speedtest-server strong { font-size: 16px; }
   .speedtest-metric strong { font-size: 26px; }

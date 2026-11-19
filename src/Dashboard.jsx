@@ -746,7 +746,7 @@ function Dashboard({ onLogout }) {
         isSubscriptionsLoading={isSubscriptionsLoading}
         subscriptionsError={subscriptionsError}
       />
-      {currentPage === 'speedtest' && <SpeedTestPage />}
+      {currentPage === 'speedtest' && <SpeedTestPage key={profile?.id || 'loading'} userId={profile?.id} />}
     </div>
   );
 }

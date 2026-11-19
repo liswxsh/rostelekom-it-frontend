@@ -9,6 +9,27 @@ const TEST_SERVER = {
   pingURL: 'backend/empty.php',
   getIpURL: 'backend/getIP.php',
 };
+const HISTORY_LIMIT = 10;
+const historyKey = (userId) => `speedtest-history:${userId}`;
+
+function readHistory(userId) {
+  if (!userId) return [];
+  try {
+    const saved = JSON.parse(localStorage.getItem(historyKey(userId)) || '[]');
+    return Array.isArray(saved) ? saved.filter((item) =>
+      item && typeof item.date === 'string' && Number.isFinite(Date.parse(item.date)) &&
+      ['download', 'upload', 'ping', 'jitter'].every((key) => Number.isFinite(item[key]) && item[key] >= 0)
+    ).slice(0, HISTORY_LIMIT) : [];
+  } catch {
+    return [];
+  }
+}
+
+function validMeasurement(value) {
+  if (value == null || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : null;
+}
 
 let scriptPromise;
 
@@ -52,14 +73,16 @@ function Metric({ label, value, unit }) {
   );
 }
 
-function SpeedTestPage() {
+function SpeedTestPage({ userId }) {
   const testRef = useRef(null);
   const failedRef = useRef(false);
   const mountedRef = useRef(true);
+  const latestResultRef = useRef({});
   const [status, setStatus] = useState('ready');
   const [result, setResult] = useState({});
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState('');
+  const [history, setHistory] = useState(() => readHistory(userId));
 
   useEffect(() => {
     mountedRef.current = true;
@@ -74,6 +97,7 @@ function SpeedTestPage() {
     if (status === 'running' || status === 'preparing') return;
     setError('');
     setResult({});
+    latestResultRef.current = {};
     failedRef.current = false;
     setProgress(0);
     setStatus('preparing');
@@ -101,13 +125,15 @@ function SpeedTestPage() {
       test.onupdate = (data) => {
         if (!mountedRef.current) return;
         if ([data.dlStatus, data.ulStatus, data.pingStatus].includes('Fail')) failedRef.current = true;
-        setResult({
+        const nextResult = {
           download: data.dlStatus,
           upload: data.ulStatus,
           ping: data.pingStatus,
           jitter: data.jitterStatus,
           phase: data.testState,
-        });
+        };
+        latestResultRef.current = nextResult;
+        setResult(nextResult);
         const phaseProgress = data.testState === 1 ? data.dlProgress / 3
           : data.testState === 2 ? (1 + data.pingProgress) / 3
             : data.testState === 3 ? (2 + data.ulProgress) / 3 : 0;
@@ -117,9 +143,22 @@ function SpeedTestPage() {
         if (!mountedRef.current) return;
         testRef.current = null;
         const failed = failedRef.current;
-        setStatus(aborted || failed ? 'ready' : 'done');
-        setProgress(aborted || failed ? 0 : 100);
-        if (failed) setError('Не удалось закончить измерение. Проверьте подключение и попробуйте ещё раз.');
+        const measurement = Object.fromEntries(
+          ['download', 'upload', 'ping', 'jitter'].map((key) => [key, validMeasurement(latestResultRef.current[key])])
+        );
+        const complete = !aborted && !failed && Object.values(measurement).every((value) => value !== null);
+        setStatus(complete ? 'done' : 'ready');
+        setProgress(complete ? 100 : 0);
+        if (!aborted && !complete) setError('Не удалось закончить измерение. Проверьте подключение и попробуйте ещё раз.');
+        if (complete && userId) {
+          const updated = [{ date: new Date().toISOString(), ...measurement }, ...readHistory(userId)].slice(0, HISTORY_LIMIT);
+          setHistory(updated);
+          try {
+            localStorage.setItem(historyKey(userId), JSON.stringify(updated));
+          } catch {
+            setError('Тест завершён, но сохранить результат в браузере не удалось.');
+          }
+        }
       };
       testRef.current = test;
       setStatus('running');
@@ -133,6 +172,15 @@ function SpeedTestPage() {
   };
 
   const stopTest = () => testRef.current?.abort();
+  const clearHistory = () => {
+    if (!userId) return;
+    try {
+      localStorage.removeItem(historyKey(userId));
+      setHistory([]);
+    } catch {
+      setError('Не удалось очистить историю в браузере.');
+    }
+  };
   const phaseLabel = status === 'preparing' ? 'Подключаемся к серверу…'
     : status === 'running' ? ({ 1: 'Проверяем загрузку', 2: 'Измеряем задержку', 3: 'Проверяем отдачу' }[result.phase] || 'Начинаем тест…')
       : status === 'done' ? 'Тест завершён' : 'Готов к тесту';
@@ -180,6 +228,33 @@ function SpeedTestPage() {
           {status === 'running' ? 'Остановить тест' : status === 'preparing' ? 'Подключаемся…' : status === 'done' ? 'Проверить ещё раз' : 'Начать тест'}
         </button>
         <p className="speedtest-note">Во время теста будет передаваться трафик через сервер Sharktech. Результат зависит от нагрузки на сеть и расстояния до сервера.</p>
+      </section>
+
+      <section className="speedtest-history" aria-label="История тестов скорости">
+        <div className="speedtest-history-heading">
+          <div>
+            <p className="eyebrow">Ваши результаты</p>
+            <h2>История проверок</h2>
+          </div>
+          {history.length > 0 && <button type="button" onClick={clearHistory}>Очистить историю</button>}
+        </div>
+        {history.length === 0 ? (
+          <p className="speedtest-history-empty">Здесь появятся результаты после первого теста.</p>
+        ) : (
+          <ol className="speedtest-history-list">
+            {history.map((item) => (
+              <li key={item.date} className="speedtest-history-item">
+                <time dateTime={item.date}>{new Date(item.date).toLocaleString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</time>
+                <div className="speedtest-history-values">
+                  <span>Загрузка <strong>{showNumber(item.download)}</strong> Мбит/с</span>
+                  <span>Отдача <strong>{showNumber(item.upload)}</strong> Мбит/с</span>
+                  <span>Ping <strong>{showNumber(item.ping)}</strong> мс</span>
+                  <span>Jitter <strong>{showNumber(item.jitter)}</strong> мс</span>
+                </div>
+              </li>
+            ))}
+          </ol>
+        )}
       </section>
     </main>
   );
