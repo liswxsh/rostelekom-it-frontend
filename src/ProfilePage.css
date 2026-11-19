@@ -254,21 +254,6 @@
   text-decoration: none;
 }
 
-.profile-speedtest-card {
-  width: 100%;
-  border: 0;
-  font: inherit;
-  text-align: left;
-}
-.profile-speedtest-card .profile-coverage-icon {
-  color: var(--color-purple);
-  background: #f1e7ff;
-  font-size: 30px;
-}
-.profile-speedtest-card .profile-coverage-link { background: var(--color-purple); }
-.profile-speedtest-card:hover .profile-coverage-link { background: var(--color-purple-hover); }
-.profile-speedtest-card:focus-visible { outline: 3px solid #d8c8fa; outline-offset: 3px; }
-
 
 @media (max-width: 800px) {
   .profile-grid { grid-template-columns: 1fr; }

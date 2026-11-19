@@ -741,7 +741,6 @@ function Dashboard({ onLogout }) {
 
       <ProfilePage
         hidden={currentPage !== 'profile'}
-        onOpenSpeedTest={() => showPage('speedtest')}
         profile={profile}
         account={account}
         activeSubscription={activeSubscription}

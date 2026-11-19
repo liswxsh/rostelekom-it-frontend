@@ -132,7 +132,7 @@ rostelekom-it-frontend/
 
 ## Тест скорости
 
-Страница открывается из верхнего меню или профиля. Измерения выполняет [LibreSpeed](https://github.com/librespeed/speedtest) через публичный сервер Sharktech в Амстердаме; наш бэкенд для этого не используется. Скрипты LibreSpeed и текст лицензии LGPL-3.0 находятся в `public/`. Для запуска теста нужен доступ к `amsspeed.sharktech.net`.
+Страница открывается из верхнего меню. Измерения выполняет [LibreSpeed](https://github.com/librespeed/speedtest) через публичный сервер Sharktech в Амстердаме; наш бэкенд для этого не используется. Скрипты LibreSpeed и текст лицензии LGPL-3.0 находятся в `public/`. Для запуска теста нужен доступ к `amsspeed.sharktech.net`.
 
 ## Используемые технологии
 
