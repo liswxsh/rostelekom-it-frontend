@@ -148,6 +148,34 @@ function mergeTariffData(apiTariff) {
   };
 }
 
+function getTariffOptions(tariff) {
+  const details = TARIFFS.find((item) => item.name === tariff?.name || item.name === tariff?.tariffName);
+  if (!details) return null;
+
+  const speed = details.speed;
+  const sms = details.features.find((feature) => /^(\d+|Безлимит) SMS$/i.test(feature));
+  return {
+    gigabytes: /Безлимит\s+ГБ/i.test(speed) ? Infinity : Number(speed.match(/(\d+)\s*ГБ/i)?.[1] ?? NaN),
+    minutes: /Безлимит\s+(?:ГБ\s+и\s+)?минут/i.test(speed) ? Infinity : Number(speed.match(/(\d+)\s*минут/i)?.[1] ?? NaN),
+    sms: sms?.startsWith('Безлимит') ? Infinity : Number(sms?.match(/\d+/)?.[0] ?? NaN),
+    features: details.features.filter((feature) => feature !== sms),
+  };
+}
+
+function allowanceText(value, unit) {
+  if (value === Infinity) return 'Безлимит';
+  if (!Number.isFinite(value)) return 'Не указано';
+  return `${value} ${unit}`;
+}
+
+function allowanceChange(previous, next) {
+  if (!Number.isFinite(previous) && previous !== Infinity) return 'neutral';
+  if (!Number.isFinite(next) && next !== Infinity) return 'neutral';
+  if (next > previous) return 'added';
+  if (next < previous) return 'removed';
+  return 'neutral';
+}
+
 const TARIFF_CATEGORY_LABELS = {
   INTERNET: 'Интернет',
   TV: 'Телевидение',
@@ -175,8 +203,18 @@ const BILLING_PERIOD_LABELS = {
 };
 
 const PENDING_PAYMENT_KEY = 'pendingPaymentId';
+const PENDING_TARIFF_SWITCH_KEY = 'pendingTariffSwitch';
 const PAYMENT_POLL_INTERVAL = 3000;
 const PAYMENT_POLL_ATTEMPTS = 20;
+
+function getPendingTariffSwitch() {
+  try {
+    return JSON.parse(localStorage.getItem(PENDING_TARIFF_SWITCH_KEY) || 'null');
+  } catch {
+    localStorage.removeItem(PENDING_TARIFF_SWITCH_KEY);
+    return null;
+  }
+}
 
 function formatMoney(value, currency = 'RUB') {
   return new Intl.NumberFormat('ru-RU', {
@@ -220,6 +258,10 @@ function Dashboard({ onLogout }) {
   const [isSubscriptionsLoading, setIsSubscriptionsLoading] = useState(true);
   const [subscriptionsError, setSubscriptionsError] = useState('');
   const [submittingTariffId, setSubmittingTariffId] = useState('');
+  const [switchTarget, setSwitchTarget] = useState(null);
+  const [pendingCancellation, setPendingCancellation] = useState(null);
+  const switchDialogRef = useRef(null);
+  const reconcilingSwitchRef = useRef(false);
   const [profile, setProfile] = useState(null);
   const [account, setAccount] = useState(undefined);
   const [transactions, setTransactions] = useState([]);
@@ -231,6 +273,12 @@ function Dashboard({ onLogout }) {
   const [paymentMessage, setPaymentMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (switchTarget && switchDialogRef.current && !switchDialogRef.current.open) {
+      switchDialogRef.current.showModal();
+    }
+  }, [switchTarget]);
 
   const showPage = (page) => {
     setError('');
@@ -268,7 +316,57 @@ function Dashboard({ onLogout }) {
   const loadSubscriptions = useCallback(async () => {
     try {
       const response = await getJson('/api/services/subscriptions/my?size=20', { auth: true });
-      const items = extractPagedItems(response);
+      let items = extractPagedItems(response);
+      let savedSwitch = getPendingTariffSwitch();
+      let previous = items.find((item) => item.id === savedSwitch?.previousId);
+      if (savedSwitch && (!previous || previous.userId !== savedSwitch.userId)) {
+        localStorage.removeItem(PENDING_TARIFF_SWITCH_KEY);
+        savedSwitch = null;
+      }
+      if (!savedSwitch) {
+        const active = items.filter((item) => item.status === 'ACTIVE')
+          .sort((first, second) => new Date(second.createdAt) - new Date(first.createdAt));
+        const current = active[0]?.lastChargeTransactionId ? active[0] : null;
+        previous = active.find((item) => current && item.id !== current.id
+          && item.tariffCategory === current.tariffCategory && item.userId === current.userId);
+        if (previous) {
+          savedSwitch = { userId: previous.userId, previousId: previous.id, nextTariffId: current.tariffId };
+          localStorage.setItem(PENDING_TARIFF_SWITCH_KEY, JSON.stringify(savedSwitch));
+        }
+      }
+      const next = items.find((item) => item.tariffId === savedSwitch?.nextTariffId && item.status !== 'CANCELED');
+
+      if (savedSwitch && previous?.userId === savedSwitch.userId && !reconcilingSwitchRef.current) {
+        if (previous.status === 'CANCELED') {
+          localStorage.removeItem(PENDING_TARIFF_SWITCH_KEY);
+          setPendingCancellation(null);
+          setError('');
+        } else if (previous.status === 'ACTIVE' && next?.status === 'ACTIVE' && next.lastChargeTransactionId) {
+          reconcilingSwitchRef.current = true;
+          try {
+            await postJson(`/api/services/subscriptions/${previous.id}/cancel?immediate=true`, undefined, { auth: true });
+            localStorage.removeItem(PENDING_TARIFF_SWITCH_KEY);
+            setPendingCancellation(null);
+            setError('');
+            const refreshed = await getJson('/api/services/subscriptions/my?size=20', { auth: true });
+            items = extractPagedItems(refreshed);
+            setNotice(`Тариф изменён на «${next.tariffName}».`);
+          } catch {
+            const refreshed = await getJson('/api/services/subscriptions/my?size=20', { auth: true }).catch(() => null);
+            if (refreshed) items = extractPagedItems(refreshed);
+            if (items.some((item) => item.id === previous.id && item.status === 'CANCELED')) {
+              localStorage.removeItem(PENDING_TARIFF_SWITCH_KEY);
+              setPendingCancellation(null);
+              setError('');
+            } else {
+              setPendingCancellation({ previous, nextName: next.tariffName });
+              setError(`Не удалось отключить прежний тариф. Повторим автоматически.`);
+            }
+          } finally {
+            reconcilingSwitchRef.current = false;
+          }
+        }
+      }
       setSubscriptions(items);
       setSubscriptionsError('');
       return items;
@@ -281,56 +379,115 @@ function Dashboard({ onLogout }) {
     }
   }, [handleError]);
 
-  const subscribeToTariff = async (tariff) => {
-    if (!tariff.id || submittingTariffId || isSubscriptionsLoading || subscriptionsError) return;
+  const finishTariffSwitch = async (previous, nextName) => {
+    try {
+      await postJson(`/api/services/subscriptions/${previous.id}/cancel?immediate=true`, undefined, { auth: true });
+      localStorage.removeItem(PENDING_TARIFF_SWITCH_KEY);
+      setPendingCancellation(null);
+      return true;
+    } catch {
+      const latest = await loadSubscriptions();
+      if (latest?.some((item) => item.id === previous.id && item.status === 'CANCELED')) {
+        localStorage.removeItem(PENDING_TARIFF_SWITCH_KEY);
+        setPendingCancellation(null);
+        return true;
+      }
+      setPendingCancellation({ previous, nextName });
+      setError(`Не удалось отключить прежний тариф. Повторим автоматически.`);
+      return false;
+    }
+  };
+
+  const subscribeToTariff = async (tariff, previousSubscription = null) => {
+    if (!tariff.id || submittingTariffId || isSubscriptionsLoading || subscriptionsError || pendingCancellation) return;
     if (subscriptions.some((item) => item.tariffId === tariff.id && item.status !== 'CANCELED')) return;
 
     setSubmittingTariffId(tariff.id);
     setError('');
     setNotice('');
+    let subscriptionRequested = false;
 
     try {
+      if (previousSubscription) {
+        const latest = await loadSubscriptions();
+        if (!latest) {
+          setError('Не удалось проверить текущий тариф. Попробуйте ещё раз.');
+          return;
+        }
+        previousSubscription = latest.find((item) => item.id === previousSubscription.id && item.status === 'ACTIVE');
+        if (!previousSubscription) {
+          setError('Текущий тариф изменился. Обновите страницу и проверьте подписки.');
+          return;
+        }
+      }
+
+      const freshTariff = await getJson(`/api/services/tariffs/${tariff.id}`);
+      if (!freshTariff.active || Number(freshTariff.price) !== Number(tariff.price)) {
+        await loadTariffs();
+        setError('Условия тарифа изменились. Проверьте их перед подключением.');
+        return;
+      }
+
       const freshAccount = await getJson('/api/billing/accounts/me', { auth: true });
       setAccount(freshAccount);
-      if (freshAccount.status !== 'ACTIVE') {
+      if (freshAccount?.status !== 'ACTIVE') {
         setError('Лицевой счёт недоступен для списания.');
         return;
       }
-      const missingAmount = Number(tariff.price) - Number(freshAccount.balance);
+      const missingAmount = Number(freshTariff.price) - Number(freshAccount.balance);
       if (Number.isFinite(missingAmount) && missingAmount > 0) {
         setError(`Недостаточно средств. Пополните баланс на ${formatMoney(missingAmount, freshAccount.currency)}.`);
         return;
       }
 
+      subscriptionRequested = true;
+      if (previousSubscription) {
+        localStorage.setItem(PENDING_TARIFF_SWITCH_KEY, JSON.stringify({
+          userId: previousSubscription.userId,
+          previousId: previousSubscription.id,
+          nextTariffId: tariff.id,
+        }));
+      }
       const subscription = await postJson(
         '/api/services/subscriptions',
         { tariffId: tariff.id },
         { auth: true },
       );
       setSubscriptions((current) => [subscription, ...current]);
-      await loadData(false);
-      await loadSubscriptions();
       if (subscription.status === 'ACTIVE' && subscription.lastChargeTransactionId) {
-        setNotice(`Тариф «${tariff.name}» подключён. Оплата списана с баланса.`);
+        if (!previousSubscription || await finishTariffSwitch(previousSubscription, tariff.name)) {
+          setNotice(previousSubscription
+            ? `Тариф изменён на «${tariff.name}». Оплата списана с баланса.`
+            : `Тариф «${tariff.name}» подключён. Оплата списана с баланса.`);
+        }
       } else {
         setError('Тариф ожидает оплаты. Проверьте состояние подписки в профиле.');
       }
     } catch (requestError) {
       if (requestError instanceof ApiError && requestError.status === 401) {
         handleError(requestError);
+      } else if (!subscriptionRequested) {
+        handleError(requestError);
       } else {
         const current = await loadSubscriptions();
-        await loadData(false);
         const existing = current?.find((item) => item.tariffId === tariff.id && item.status !== 'CANCELED');
         if (existing?.status === 'ACTIVE' && existing.lastChargeTransactionId) {
-          setNotice(`Тариф «${tariff.name}» подключён. Оплата списана с баланса.`);
+          const oldTariff = previousSubscription && current.find((item) => item.id === previousSubscription.id && item.status === 'ACTIVE');
+          if (!oldTariff || await finishTariffSwitch(oldTariff, tariff.name)) {
+            setNotice(previousSubscription
+              ? `Тариф изменён на «${tariff.name}». Оплата списана с баланса.`
+              : `Тариф «${tariff.name}» подключён. Оплата списана с баланса.`);
+          }
         } else if (existing?.status === 'SUSPENDED') {
           setError(`Тариф «${tariff.name}» ожидает оплаты. Повторное подключение не требуется: сервис попробует списать оплату автоматически.`);
         } else {
+          localStorage.removeItem(PENDING_TARIFF_SWITCH_KEY);
           setError(requestError.message?.replace(tariff.id, tariff.name) || 'Не удалось подключить тариф.');
         }
       }
     } finally {
+      await loadData(false);
+      await loadSubscriptions();
       setSubmittingTariffId('');
     }
   };
@@ -342,6 +499,10 @@ function Dashboard({ onLogout }) {
     setNotice('');
     try {
       await postJson(`/api/services/subscriptions/${subscription.id}/cancel?immediate=true`, undefined, { auth: true });
+      const savedSwitch = getPendingTariffSwitch();
+      if (savedSwitch?.nextTariffId === subscription.tariffId && savedSwitch.userId === subscription.userId) {
+        localStorage.removeItem(PENDING_TARIFF_SWITCH_KEY);
+      }
       await loadSubscriptions();
       setNotice(`Ожидание оплаты тарифа «${subscription.tariffName}» отменено.`);
     } catch (requestError) {
@@ -358,6 +519,12 @@ function Dashboard({ onLogout }) {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [loadSubscriptions, loadTariffs]);
+
+  useEffect(() => {
+    if (!getPendingTariffSwitch() && !pendingCancellation && subscriptions.filter((item) => item.status === 'ACTIVE').length < 2) return undefined;
+    const timer = window.setInterval(loadSubscriptions, 15000);
+    return () => window.clearInterval(timer);
+  }, [loadSubscriptions, pendingCancellation, subscriptions]);
 
   const loadData = useCallback(async (showLoader = true) => {
     if (showLoader) setIsLoading(true);
@@ -578,10 +745,15 @@ function Dashboard({ onLogout }) {
   const fullName = [profile?.lastName, profile?.firstName, profile?.middleName]
     .filter(Boolean)
     .join(' ') || 'Имя пользователя';
-  const activeSubscription = subscriptions.find((subscription) => (
-    subscription.status === 'ACTIVE'
-  ));
+  const activeSubscriptions = subscriptions.filter((subscription) => subscription.status === 'ACTIVE')
+    .sort((first, second) => new Date(second.createdAt) - new Date(first.createdAt));
+  const activeSubscription = activeSubscriptions[0];
   const suspendedSubscriptions = subscriptions.filter((subscription) => subscription.status === 'SUSPENDED');
+  const currentOptions = getTariffOptions(activeSubscription);
+  const selectedOptions = getTariffOptions(switchTarget);
+  const currentFeatures = currentOptions?.features || [];
+  const selectedFeatures = selectedOptions?.features || [];
+  const comparedFeatures = [...new Set([...currentFeatures, ...selectedFeatures])];
   const tariffStatus = subscriptionsError
     ? { label: 'Недоступно', color: 'neutral' }
     : isSubscriptionsLoading
@@ -830,8 +1002,8 @@ function Dashboard({ onLogout }) {
                     <button
                       className="tariff-button"
                       type="button"
-                      disabled={!tariff.id || Boolean(submittingTariffId) || isSubscriptionsLoading || Boolean(subscriptionsError) || Boolean(connected)}
-                      onClick={() => subscribeToTariff(tariff)}
+                      disabled={!tariff.id || Boolean(submittingTariffId) || isSubscriptionsLoading || Boolean(subscriptionsError) || Boolean(connected) || Boolean(pendingCancellation)}
+                      onClick={() => activeSubscription ? setSwitchTarget(tariff) : subscribeToTariff(tariff)}
                     >
                       {connected ? 'Подключён' : submittingTariffId === tariff.id ? 'Подключаем…' : 'Подключить'}
                     </button>
@@ -924,6 +1096,52 @@ function Dashboard({ onLogout }) {
           </section>
         </div>
       </main>
+
+      {switchTarget && activeSubscription && (
+        <dialog ref={switchDialogRef} className="tariff-switch-dialog" onClose={() => setSwitchTarget(null)} aria-labelledby="tariff-switch-title">
+          <button className="tariff-switch-close" type="button" aria-label="Закрыть" onClick={() => setSwitchTarget(null)}>×</button>
+          <p className="card-label">Смена тарифа</p>
+          <h2 id="tariff-switch-title">{activeSubscription.tariffName} → {switchTarget.name}</h2>
+          <div className="tariff-switch-comparison">
+            {[
+              ['Гигабайты', 'gigabytes', 'ГБ'],
+              ['Минуты', 'minutes', 'минут'],
+              ['СМС', 'sms', 'SMS'],
+            ].map(([label, field, unit]) => {
+              const previous = currentOptions?.[field];
+              const next = selectedOptions?.[field];
+              const change = allowanceChange(previous, next);
+              return (
+                <div className="tariff-switch-row" key={field}>
+                  <span>{label}</span>
+                  <strong className={`tariff-switch-${change}`}>
+                    {previous === next && (Number.isFinite(previous) || previous === Infinity)
+                      ? `Не меняется (${allowanceText(next, unit)})`
+                      : `${allowanceText(previous, unit)} → ${allowanceText(next, unit)}`}
+                  </strong>
+                </div>
+              );
+            })}
+          </div>
+          <h3>Дополнительные возможности</h3>
+          <ul className="tariff-switch-features">
+            {comparedFeatures.map((feature) => {
+              const change = !selectedFeatures.includes(feature) ? 'removed' : !currentFeatures.includes(feature) ? 'added' : 'neutral';
+              return <li className={`tariff-switch-${change}`} key={feature}>{change === 'added' ? '+ ' : change === 'removed' ? '− ' : '✓ '}{feature}</li>;
+            })}
+          </ul>
+          <p className="tariff-switch-payment">После подтверждения спишется {formatMoney(switchTarget.price, switchTarget.currency)}. Остаток прежнего периода не пересчитывается.</p>
+          <p className="tariff-switch-question">Точно хотите изменить тариф?</p>
+          <div className="tariff-switch-buttons">
+            <button type="button" onClick={() => setSwitchTarget(null)}>Нет, оставить</button>
+            <button type="button" onClick={() => {
+              const nextTariff = switchTarget;
+              setSwitchTarget(null);
+              subscribeToTariff(nextTariff, activeSubscription);
+            }}>Да, изменить</button>
+          </div>
+        </dialog>
+      )}
     </div>
   );
 }

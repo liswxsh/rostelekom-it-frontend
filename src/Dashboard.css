@@ -708,6 +708,83 @@
   margin-top: 0;
 }
 
+.tariff-switch-dialog {
+  width: min(520px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  box-sizing: border-box;
+  padding: 28px;
+  overflow-y: auto;
+  border: 0;
+  border-radius: 20px;
+  color: #101828;
+  background: #fff;
+  box-shadow: 0 20px 60px rgb(16 24 40 / 25%);
+  font: inherit;
+}
+
+.tariff-switch-dialog::backdrop { background: rgb(16 24 40 / 55%); }
+.tariff-switch-dialog .card-label { margin: 0 0 8px; color: var(--color-purple); }
+.tariff-switch-dialog h2 { margin: 0 30px 24px 0; font-size: 26px; }
+.tariff-switch-dialog h3 { margin: 24px 0 12px; font-size: 17px; }
+
+.tariff-switch-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  border: 0;
+  color: #667085;
+  background: transparent;
+  font-size: 26px;
+  cursor: pointer;
+}
+
+.tariff-switch-comparison { border-top: 1px solid #e8eaf0; }
+.tariff-switch-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid #e8eaf0;
+}
+
+.tariff-switch-row > span { color: #667085; }
+.tariff-switch-row strong { text-align: right; }
+.tariff-switch-added { color: #027a48; }
+.tariff-switch-removed { color: #b42318; }
+.tariff-switch-neutral { color: #344054; }
+
+.tariff-switch-features {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-weight: 600;
+}
+
+.tariff-switch-payment {
+  margin: 24px 0 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  color: #475467;
+  background: #f5f6f8;
+  line-height: 1.45;
+}
+
+.tariff-switch-question { margin: 24px 0 16px; font-size: 18px; font-weight: 700; }
+.tariff-switch-buttons { display: flex; justify-content: flex-end; gap: 10px; }
+.tariff-switch-buttons button {
+  padding: 11px 16px;
+  border: 1px solid #d8dce5;
+  border-radius: 10px;
+  background: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tariff-switch-buttons button:last-child { border-color: var(--color-purple); color: #fff; background: var(--color-purple); }
+
 .profile-heading {
   display: flex;
   align-items: end;
@@ -948,6 +1025,11 @@
 }
 
 @media (max-width: 560px) {
+  .tariff-switch-dialog { padding: 22px; }
+  .tariff-switch-row { flex-direction: column; gap: 4px; }
+  .tariff-switch-row strong { text-align: left; }
+  .tariff-switch-buttons { flex-direction: column-reverse; }
+
   .header-content {
     min-height: 70px;
   }

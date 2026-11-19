@@ -300,6 +300,7 @@ function App() {
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('pendingPaymentId');
+    localStorage.removeItem('pendingTariffSwitch');
     setIsAuthenticated(false);
     setStep('phone');
     setPhone('');
